@@ -1,3 +1,4 @@
+# task.ps1 (in repo root)
 param(
   [Parameter(Position=0)]
   [string]$Task = "help",

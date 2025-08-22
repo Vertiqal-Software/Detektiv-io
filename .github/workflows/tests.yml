@@ -13,23 +13,30 @@ jobs:
       postgres:
         image: postgres:16
         env:
+          # Always set user/db
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }} # pragma: allowlist secret
           POSTGRES_DB: detecktiv
+
+          # Use password when we have access to secrets (push to main),
+          # but fall back to trust auth for PRs from forks/bots.
+          POSTGRES_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.CI_DB_PASSWORD || '' }}
+          POSTGRES_HOST_AUTH_METHOD: ${{ github.event_name == 'pull_request' && 'trust' || '' }}
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres -d detecktiv"
+          --health-cmd="pg_isready -h 127.0.0.1 -p 5432 -U postgres -d detecktiv"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=10
+          --health-retries=30
 
     env:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }} # pragma: allowlist secret
       POSTGRES_DB: detecktiv
       POSTGRES_HOST: 127.0.0.1
       POSTGRES_PORT: "5432"
+
+      # Match the service logic: password for pushes, empty for PRs (trust).
+      POSTGRES_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.CI_DB_PASSWORD || '' }} # pragma: allowlist secret
 
     steps:
       - uses: actions/checkout@v4
@@ -43,11 +50,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      # --- ensure psql client is present for connectivity checks (keep) ---
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Wait for Postgres
         run: |
-          for i in {1..30}; do
+          for i in {1..60}; do
             pg_isready -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB" && break
             sleep 1
+          done
+
+      # --- extra wait using real psql login (handles auth readiness) (keep) ---
+      - name: Extra wait (psql ping)
+        env:
+          # Use secret on pushes; empty on PRs (trust mode)
+          PGPASSWORD: ${{ github.event_name != 'pull_request' && secrets.CI_DB_PASSWORD || '' }} # pragma: allowlist secret
+        run: |
+          echo "Pinging DB with psql until it accepts auth..."
+          for i in {1..40}; do
+            psql "host=127.0.0.1 port=5432 dbname=$POSTGRES_DB user=$POSTGRES_USER sslmode=disable" -c "select 1" && break
+            sleep 2
           done
 
       - name: Apply migrations

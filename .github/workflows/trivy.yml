@@ -1,4 +1,5 @@
 name: Trivy Security Scan
+
 on:
   push:
     branches: [ "main" ]
@@ -11,9 +12,16 @@ jobs:
   trivy:
     name: Trivy FS + (optional) Image Scan
     runs-on: ubuntu-latest
+
+    # Allow uploading SARIF when possible
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - uses: actions/checkout@v4
 
+      # Filesystem scan (repo)
       - name: Trivy FS Scan (repo)
         uses: aquasecurity/trivy-action@0.27.0
         with:
@@ -23,7 +31,17 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH,MEDIUM'
 
-      - name: Upload SARIF to GitHub Security
+      # Upload to GitHub Code Scanning only for PUBLIC repos (private repos require GHAS)
+      - name: Upload SARIF to GitHub Security (public repos only)
+        if: ${{ github.event.repository.private == false }}
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      # For PRIVATE repos (or if upload is skipped), keep the SARIF as an artifact
+      - name: Upload SARIF as artifact (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+          if-no-files-found: warn

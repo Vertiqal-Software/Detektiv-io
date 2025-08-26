@@ -23,3 +23,10 @@ Thumbs.db
 node_modules/
 dist/
 build/
+
+.env.docker
+# Local env files
+.env
+.env.*
+!.env.example
+!.env.docker.example

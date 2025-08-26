@@ -1,19 +1,26 @@
 import os
 import time
 import psycopg2
+import pytest
+
+RUN_DB = os.getenv("RUN_DB_TESTS") == "1"
 
 
 def _dsn_from_env():
     user = os.getenv("POSTGRES_USER", "postgres")
-    pw = os.getenv("POSTGRES_PASSWORD", "")
+    password = os.getenv("POSTGRES_PASSWORD", "")
     host = os.getenv("POSTGRES_HOST", "127.0.0.1")
     port = os.getenv("POSTGRES_PORT", "5432")
     db = os.getenv("POSTGRES_DB", "detecktiv")
-    return f"dbname={db} user={user} password={pw} host={host} port={port}"
+    return f"dbname={db} user={user} password={password} host={host} port={port}"
+
+
+pytestmark = pytest.mark.skipif(
+    not RUN_DB, reason="DB tests disabled. Set RUN_DB_TESTS=1 to enable."
+)
 
 
 def test_select_1():
-    # a couple retries in CI just in case
     dsn = _dsn_from_env()
     last_err = None
     for _ in range(10):

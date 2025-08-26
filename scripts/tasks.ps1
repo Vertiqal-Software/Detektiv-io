@@ -126,7 +126,9 @@ Available tasks:
   .\task downgrade          Downgrade one revision (⚠ use carefully)
   .\task db-stamp <rev>     Stamp DB at a revision without running migrations
   .\task seed               Insert sample dev data (safe/no-op if already present)
-  .\task test              Run pytest locally
+  .\task test               Run pytest locally
+  .\task api	            Test API Health
+
 
 
 "@
@@ -323,3 +325,9 @@ function test {
   }
   Write-Host "Tests passed." -ForegroundColor Green
 }
+function api {
+  # Run FastAPI locally
+  Write-Host "→ uvicorn app.main:app --reload --port 8000"
+  & uvicorn app.main:app --reload --port 8000
+}
+

@@ -1,0 +1,52 @@
+name: Migrations check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpass123  # pragma: allowlist secret
+          POSTGRES_DB: detecktiv
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d detecktiv"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install alembic psycopg2-binary python-dotenv SQLAlchemy
+
+      - name: Create .env for CI
+        run: |  # pragma: allowlist secret
+          echo "POSTGRES_USER=postgres" >> .env
+          echo "POSTGRES_PASSWORD=testpass123" >> .env
+          echo "POSTGRES_DB=detecktiv" >> .env
+          echo "POSTGRES_HOST=127.0.0.1" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+
+      - name: Run migrations up
+        run: |
+          python -m alembic upgrade head
+
+      - name: Migrations round-trip (optional)
+        run: |
+          python -m alembic downgrade -1
+          python -m alembic upgrade head

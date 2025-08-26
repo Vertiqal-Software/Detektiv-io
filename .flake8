@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 120
+extend-ignore = E203, W503
+per-file-ignores =
+    db/migrations/env.py:E501
+    db/migrations/versions/*.py:F401

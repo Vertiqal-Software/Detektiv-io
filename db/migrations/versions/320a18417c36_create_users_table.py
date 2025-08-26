@@ -2,8 +2,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = "0001_create_users"
-down_revision = None
+revision = "0001_create_users"  # pragma: allowlist secret
+down_revision = None  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

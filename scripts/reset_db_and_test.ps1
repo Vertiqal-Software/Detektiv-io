@@ -13,7 +13,7 @@ docker compose exec $Service psql -U $PgUser -d $PgDb -c "TRUNCATE TABLE public.
 Write-Host "Setting test env vars and running pytest..."
 $env:RUN_DB_TESTS      = '1'
 $env:POSTGRES_USER     = 'postgres'
-$env:POSTGRES_PASSWORD = 'OPqw1290@@.pgAdmin4'  # pragma: allowlist secret
+if (-not $env:POSTGRES_PASSWORD) { throw "Set POSTGRES_PASSWORD in your environment." }
 $env:POSTGRES_DB       = 'detecktiv'
 $env:POSTGRES_HOST     = '127.0.0.1'
 $env:POSTGRES_PORT     = '5432'

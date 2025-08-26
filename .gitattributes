@@ -3,5 +3,5 @@
 # Shell scripts must be LF for Linux containers
 *.sh text eol=lf
 
-# PowerShell can keep CRLF
+# PowerShell scripts can keep CRLF on Windows
 *.ps1 text eol=crlf

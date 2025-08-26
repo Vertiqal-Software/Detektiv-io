@@ -18,11 +18,12 @@ repos:
         files: |
           ^(app/|db/|docker/|scripts/|\.github/|alembic\.ini|docker-compose.*\.yml)$
         exclude: |
-          ^docs/|^backups/|^data/|^\.stack\.yml$|^\.env(\.docker)?$
+          ^docs/|^backups/|^data/|^\.stack\.yml$|^\.env(\.docker)?$|^venv/|^\.venv/
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.9
     hooks:
       - id: bandit
-        args: ["-r", ".", "-x", "tests"]
+        # Only scan first-party code trees; skip tests and virtualenvs
+        args: ["-r", "app", "db", "scripts", "-x", "tests,venv,.venv"]
         pass_filenames: false

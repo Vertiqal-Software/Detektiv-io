@@ -1,5 +1,6 @@
 # Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -34,3 +35,6 @@ build/
 .env.docker
 .env
 .env.docker
+
+.stack.yml
+backups/

@@ -14,7 +14,7 @@
 
 
 
-\*\*Retention\*\*: retention defined per data class; automatic pruning jobs.
+\*\*Retention\*\*: define per data class; enforce with automatic pruning jobs.
 
 
 
@@ -31,6 +31,4 @@
 
 
 \*\*Scraping\*\*: respect robots.txt and site terms; throttle/backoff; identify UA; record provenance.
-
-
 

@@ -32,3 +32,5 @@ build/
 !.env.docker.example
 .env.docker
 .env.docker
+.env
+.env.docker

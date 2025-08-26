@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eu
+set -euo pipefail
 
 echo "== Entrypoint starting =="
 
@@ -10,8 +10,9 @@ POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_DB="${POSTGRES_DB:-detecktiv}"
 ALEMBIC_CONFIG="${ALEMBIC_CONFIG:-/app/alembic.ini}"
+RUN_MIGRATIONS_ON_BOOT="${RUN_MIGRATIONS_ON_BOOT:-1}"  # default: run migrations (dev-friendly)
 
-export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_PORT POSTGRES_DB ALEMBIC_CONFIG
+export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_PORT POSTGRES_DB ALEMBIC_CONFIG RUN_MIGRATIONS_ON_BOOT
 
 echo "ALEMBIC_CONFIG=$ALEMBIC_CONFIG"
 cd /app 2>/dev/null || true
@@ -41,6 +42,20 @@ if [ $i -ge 60 ]; then
   echo "FATAL: Postgres never became ready."
   exit 1
 fi
+
+# ---- MIGRATION GUARD (add-only; does not remove the original call below) ----
+# If RUN_MIGRATIONS_ON_BOOT != 1, intercept ONLY the exact 'python -m alembic upgrade head' call.
+if [ "${RUN_MIGRATIONS_ON_BOOT}" != "1" ]; then
+  echo "[entrypoint] RUN_MIGRATIONS_ON_BOOT=${RUN_MIGRATIONS_ON_BOOT} -> will skip applying migrations."
+  python() {
+    if [ "${1:-}" = "-m" ] && [ "${2:-}" = "alembic" ] && [ "${3:-}" = "upgrade" ] && [ "${4:-}" = "head" ]; then
+      echo "[entrypoint] Skipping DB migrations (alembic upgrade head)"
+      return 0
+    fi
+    command python "$@"
+  }
+fi
+# ---- END MIGRATION GUARD ----
 
 echo "Running Alembic migrations."
 python -m alembic upgrade head

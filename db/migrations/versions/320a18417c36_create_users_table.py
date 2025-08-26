@@ -5,7 +5,7 @@ import sqlalchemy as sa
 revision = "0001_create_users"  # pragma: allowlist secret
 down_revision = None  # pragma: allowlist secret
 branch_labels = None
-depends_on = None
+depends_on = None  # pragma: allowlist secret
 
 
 def upgrade():

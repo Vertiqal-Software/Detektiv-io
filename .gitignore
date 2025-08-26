@@ -30,3 +30,5 @@ build/
 .env.*
 !.env.example
 !.env.docker.example
+.env.docker
+.env.docker

@@ -13,7 +13,7 @@ import sqlalchemy as sa
 revision = "c5b2a3f9d8e1"  # pragma: allowlist secret
 down_revision = "8f8e34e223b0"  # pragma: allowlist secret
 branch_labels = None
-depends_on = None
+depends_on = None  # pragma: allowlist secret
 
 
 def upgrade() -> None:

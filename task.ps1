@@ -1,18 +1,11 @@
-# task.ps1 (in repo root)
-param(
-  [Parameter(Position=0)]
-  [string]$Task = "help",
-  [Parameter(ValueFromRemainingArguments=$true)]
-  [string[]]$Args
-)
+# task.ps1 (repo root)
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
 
+$PSNativeCommandUseErrorActionPreference = $true
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\scripts\tasks.ps1"
 
-if (Get-Command $Task -ErrorAction SilentlyContinue) {
-  & $Task @Args
-} else {
-  Write-Host "Unknown task: $Task" -ForegroundColor Red
-  help
-  exit 1
-}
+$script = Join-Path $PSScriptRoot "scripts\tasks.ps1"
+if (-not (Test-Path $script)) { throw "Missing $script" }
+
+& $script @Args
+exit $LASTEXITCODE

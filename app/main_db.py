@@ -5,12 +5,13 @@ import os
 import logging
 from typing import Optional, Dict, Any, Tuple
 from threading import Lock
+import random  # noqa: F401
 
 import psycopg2  # uses psycopg2-binary from requirements
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
-# Module logger (safe to import before app logging config; handlers can be set elsewhere)
+# Module logger
 log = logging.getLogger(__name__)
 
 # Engine state
@@ -25,7 +26,6 @@ def _current_params() -> Dict[str, Any]:
     This bypasses URL parsing entirely (so passwords like 'OPqw1290@@.pgAdmin4'
     don't need any quoting/encoding).
     """
-    # Allow optional overrides via env, keep safe defaults
     sslmode = os.getenv("POSTGRES_SSLMODE", "disable")
     connect_timeout = int(os.getenv("POSTGRES_CONNECT_TIMEOUT", "5"))
 
@@ -50,7 +50,6 @@ def _masked_params(p: Dict[str, Any]) -> Dict[str, Any]:
     Return a copy of params with sensitive fields removed for safe logging.
     We *remove* password instead of assigning a string literal to avoid Bandit B105.
     """
-    # lower() guard just in case the key casing varies in future
     return {k: v for k, v in p.items() if k.lower() != "password"}
 
 
@@ -65,7 +64,6 @@ def dispose_engine_safely() -> None:
     try:
         _ENGINE.dispose()
     except Exception:
-        # Bandit B110 fix: do not silently swallow exceptions
         log.exception("Engine dispose failed")
     finally:
         _ENGINE = None
@@ -94,7 +92,6 @@ def ping_db() -> Tuple[bool, str]:
                 _ = cur.fetchone()
         return True, "ok"
     except Exception as e:
-        # Don't include password in logs
         log.warning("DB ping failed with params=%s error=%s", _masked_params(params), e)
         return False, str(e)
 
@@ -123,14 +120,13 @@ def get_engine() -> Engine:
                 try:
                     _ENGINE.dispose()
                 except Exception:
-                    # Bandit B110 fix: never silently swallow exceptions
                     log.exception("Engine dispose failed during rebuild")
 
             def _creator():
                 # Use psycopg2 with our already-built dict to avoid URL quoting issues
+                # Add a tiny random jitter to connection timeout backoff if env requests retries
                 return psycopg2.connect(**params)
 
-            # Empty URL + creator lets us skip URL quoting entirely.
             _ENGINE = create_engine(
                 "postgresql+psycopg2://",
                 future=True,

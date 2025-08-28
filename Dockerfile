@@ -1,30 +1,42 @@
+# Dockerfile
 FROM python:3.13-slim
 
-# psql is required by docker/entrypoint.sh; curl used by compose healthcheck
+# Prevent interactive tzdata etc.
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimal tools needed by entrypoint and healthcheck:
+# - postgresql-client: provides `psql` used by entrypoint.sh
+# - curl: used by the container healthcheck command
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client curl \
-    && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends postgresql-client curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Create an unprivileged user (optional but recommended)
+RUN useradd -ms /bin/bash appuser
 
 WORKDIR /app
 
-# Install runtime deps
-COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --upgrade pip \
+# Copy dependency manifests first for better layer caching
+COPY requirements.txt ./requirements.txt
+# If you have dev extras, don't install them here:
+# COPY requirements-dev.txt ./requirements-dev.txt
+
+# Install python deps (pin versions in requirements.txt)
+RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
-# Bring in app + migrations + entrypoint
-COPY alembic.ini ./ 
-COPY db ./db
-COPY app ./app
-COPY docker/entrypoint.sh ./docker/entrypoint.sh
-RUN chmod +x ./docker/entrypoint.sh
+# Copy the rest of the source
+COPY . .
 
-# Helpful envs
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    ALEMBIC_CONFIG=/app/alembic.ini
+# Ensure entrypoint is executable
+RUN chmod +x docker/entrypoint.sh
 
+# Run as non-root
+USER appuser
+
+# Alembic config expected at /app/alembic.ini per compose env
+# Entrypoint will run migrations then exec the CMD below
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]
 
-EXPOSE 8000
+# Start the API (FastAPI via uvicorn)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

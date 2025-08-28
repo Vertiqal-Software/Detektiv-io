@@ -4,6 +4,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Compute repository root (parent of /scripts)
+$REPO_ROOT = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
 # --------------------------
 # Helpers
 # --------------------------
@@ -28,16 +31,22 @@ $COMPOSE = Resolve-Compose
 function Run {
   param(
     [Parameter(Mandatory)][string]$Exe,
-    [string[]]$Args = @()
+    [string[]]$ArgList = @(),
+    [string]$WorkingDirectory = $null
   )
-  Write-Host "→ $Exe $($Args -join ' ')" -ForegroundColor DarkGray
+  Write-Host "→ $Exe $($ArgList -join ' ')" -ForegroundColor DarkGray
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Exe
-  $psi.Arguments = [string]::Join(' ', $Args)
+  $psi.Arguments = [string]::Join(' ', $ArgList)
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError  = $true
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
+  if ($WorkingDirectory) {
+    $psi.WorkingDirectory = $WorkingDirectory
+  } else {
+    $psi.WorkingDirectory = (Get-Location).Path
+  }
 
   $p = New-Object System.Diagnostics.Process
   $p.StartInfo = $psi
@@ -55,14 +64,15 @@ function Run {
   if ($out) { $out.TrimEnd() }
 }
 
-# ADD: small wrapper used by some tasks below (non-throwing, returns $true/$false)
+# Non-throwing helper for external commands
 function Invoke-External {
   param(
     [Parameter(Mandatory)][string]$Exe,
-    [string[]]$Args = @()
+    [string[]]$ArgList = @(),
+    [string]$WorkingDirectory = $null
   )
   try {
-    Run $Exe $Args | Write-Host
+    Run -Exe $Exe -ArgList $ArgList -WorkingDirectory $WorkingDirectory | Write-Host
     return $true
   } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
@@ -70,12 +80,23 @@ function Invoke-External {
   }
 }
 
+# Convenience wrapper that always runs in repo root
+function RunRepo {
+  param(
+    [Parameter(Mandatory)][string]$Exe,
+    [string[]]$ArgList = @()
+  )
+  Run -Exe $Exe -ArgList $ArgList -WorkingDirectory $REPO_ROOT
+}
+
 function Invoke-Compose {
-  param([string[]]$Args)
+  param([string[]]$ArgList)
   if ($COMPOSE.Count -gt 1) {
-    Run $COMPOSE[0] @(@($COMPOSE[1]) + $Args)
+    # e.g. "docker" + ("compose" + args...)
+    Run -Exe $COMPOSE[0] -ArgList (@($COMPOSE[1]) + $ArgList) -WorkingDirectory $REPO_ROOT
   } else {
-    Run $COMPOSE[0] $Args
+    # e.g. "docker-compose" + args...
+    Run -Exe $COMPOSE[0] -ArgList $ArgList -WorkingDirectory $REPO_ROOT
   }
 }
 
@@ -96,18 +117,59 @@ function Load-DotEnv {
   }
 }
 
+# Generic env-file loader (for .env.docker, etc.)
+function Load-EnvFile {
+  param([Parameter(Mandatory)][string]$Path)
+  if (-not (Test-Path $Path)) { return }
+  Get-Content -LiteralPath $Path | ForEach-Object {
+    if ($_ -match '^\s*#') { return }
+    if ($_ -match '^\s*$') { return }
+    $kv = $_ -split '=', 2
+    if ($kv.Length -eq 2) {
+      $k = $kv[0].Trim()
+      $v = $kv[1].Trim('"').Trim()
+      [System.Environment]::SetEnvironmentVariable($k, $v, "Process")
+    }
+  }
+}
+
+# Wait until API /health reports {"status":"ok"}
+function Wait-Api-Healthy {
+  param(
+    [string]$Url = "http://localhost:8000/health",
+    [int]$TimeoutSeconds = 60,
+    [int]$IntervalSeconds = 2
+  )
+  $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  do {
+    try {
+      $res = Invoke-RestMethod -Uri $Url -TimeoutSec 5
+      if ($res -and $res.status -eq "ok") {
+        Write-Host "API healthy ($Url)" -ForegroundColor Green
+        return $true
+      }
+    } catch {
+      # swallow and retry
+    }
+    Start-Sleep -Seconds $IntervalSeconds
+  } while ($sw.Elapsed.TotalSeconds -lt $TimeoutSeconds)
+  throw "API did not become healthy within ${TimeoutSeconds}s"
+}
+
 # Default container names from your compose up
 $PG_CONTAINER      = "detecktiv-io-postgres-1"
 $PGADMIN_CONTAINER = "detecktiv-io-pgadmin-1"
 
 # --------------------------
-# Tasks
+# Dev Tasks
 # --------------------------
 
 function help {
 @"
 Available tasks:
   .\task help               Show this help
+
+  # Dev stack (postgres + pgadmin)
   .\task up                 Start postgres + pgadmin (detached)
   .\task down               Stop and remove containers
   .\task status             Show docker containers
@@ -127,10 +189,18 @@ Available tasks:
   .\task db-stamp <rev>     Stamp DB at a revision without running migrations
   .\task seed               Insert sample dev data (safe/no-op if already present)
   .\task test               Run pytest locally
-  .\task api	            Test API Health
+  .\task api                Test API Health (local dev server)
 
-
-
+  # Prod-like minimal stack (docker-compose.prod.full.yml)
+  .\task up:prod
+  .\task down:prod
+  .\task restart:prod
+  .\task ps:prod
+  .\task logs:prod [service]
+  .\task migrate:prod
+  .\task current:prod
+  .\task psql:prod
+  .\task health:prod [-TimeoutSeconds 60] [-IntervalSeconds 2]
 "@
 }
 
@@ -158,7 +228,6 @@ function psql {
   $user = if ($Env:POSTGRES_USER) { $Env:POSTGRES_USER } else { "postgres" }
   $db   = if ($Env:POSTGRES_DB)   { $Env:POSTGRES_DB }   else { "detecktiv" }
   Write-Host "Opening psql in container '$PG_CONTAINER' as user '$user' to DB '$db'..." -ForegroundColor Cyan
-  # interactive to keep TTY attached
   & docker exec -it $PG_CONTAINER psql -U $user -d $db
 }
 
@@ -185,36 +254,28 @@ function restart {
 
 function lint {
   # pre-commit runs Black + Flake8 as configured
-  Run "python" @("-m","pre_commit","run","--all-files") | Write-Host
+  RunRepo "python" @("-m","pre_commit","run","--all-files") | Write-Host
 }
 
 function scan-secrets {
   # refresh baseline
-  Run "python" @("-m","detect_secrets","scan") | Set-Content -Encoding UTF8 ".secrets.baseline"
+  RunRepo "python" @("-m","detect_secrets","scan") | Set-Content -Encoding UTF8 (Join-Path $REPO_ROOT ".secrets.baseline")
   Write-Host "Updated .secrets.baseline" -ForegroundColor Green
 }
 
 function migrate {
-  # Apply latest Alembic migrations (call python directly for clean output/exit code)
+  # Apply latest Alembic migrations (run from repo root so alembic.ini is found)
   Load-DotEnv
   Write-Host "→ python -m alembic upgrade head" -ForegroundColor DarkGray
-  & python -m alembic upgrade head
-  if ($LASTEXITCODE -ne 0) {
-    throw "Alembic upgrade failed with exit code $LASTEXITCODE"
-  }
+  RunRepo "python" @("-m","alembic","upgrade","head") | Write-Host
   Write-Host "Migrations applied to HEAD." -ForegroundColor Green
-
   db-current
 }
 
 function db-current {
-  # Show current Alembic revision(s) (call python directly)
   Load-DotEnv
   Write-Host "→ python -m alembic current" -ForegroundColor DarkGray
-  & python -m alembic current
-  if ($LASTEXITCODE -ne 0) {
-    throw "Alembic current failed with exit code $LASTEXITCODE"
-  }
+  RunRepo "python" @("-m","alembic","current") | Write-Host
 }
 
 function make-migration {
@@ -229,7 +290,7 @@ function make-migration {
       [string]$Message
     )
     Write-Host "→ python -m alembic revision -m `"$Message`""
-    $ok = Invoke-External -Exe "python" -Args @("-m","alembic","revision","-m",$Message)
+    $ok = Invoke-External -Exe "python" -ArgList @("-m","alembic","revision","-m",$Message) -WorkingDirectory $REPO_ROOT
     if ($ok) { Write-Host "Revision created under db\migrations\versions\" -ForegroundColor Green }
 }
 
@@ -245,7 +306,7 @@ function autogen-migration {
       [string]$Message
     )
     Write-Host "→ python -m alembic revision --autogenerate -m `"$Message`""
-    $ok = Invoke-External -Exe "python" -Args @("-m","alembic","revision","--autogenerate","-m",$Message)
+    $ok = Invoke-External -Exe "python" -ArgList @("-m","alembic","revision","--autogenerate","-m",$Message) -WorkingDirectory $REPO_ROOT
     if ($ok) { Write-Host "Autogenerated revision created." -ForegroundColor Green }
 }
 
@@ -257,7 +318,7 @@ function downgrade {
         .\task downgrade
     #>
     Write-Host "→ python -m alembic downgrade -1"
-    Invoke-External -Exe "python" -Args @("-m","alembic","downgrade","-1") | Out-Null
+    Invoke-External -Exe "python" -ArgList @("-m","alembic","downgrade","-1") -WorkingDirectory $REPO_ROOT | Out-Null
 }
 
 function db-stamp {
@@ -272,10 +333,10 @@ function db-stamp {
       [string]$Revision
     )
     Write-Host "→ python -m alembic stamp $Revision"
-    Invoke-External -Exe "python" -Args @("-m","alembic","stamp",$Revision) | Out-Null
+    Invoke-External -Exe "python" -ArgList @("-m","alembic","stamp",$Revision) -WorkingDirectory $REPO_ROOT | Out-Null
 }
 
-# ADD: simple seed task for local dev data (safe to re-run)
+# Simple seed task for local dev data (safe to re-run)
 function seed {
     <#
       .SYNOPSIS
@@ -315,19 +376,108 @@ on conflict (email) do nothing;
       throw
     }
 }
+
 function test {
   # Run pytest locally with current env
   Load-DotEnv
   Write-Host "→ pytest -q" -ForegroundColor DarkGray
-  & python -m pytest -q
-  if ($LASTEXITCODE -ne 0) {
-    throw "pytest failed with exit code $LASTEXITCODE"
-  }
+  RunRepo "python" @("-m","pytest","-q") | Write-Host
   Write-Host "Tests passed." -ForegroundColor Green
 }
+
 function api {
   # Run FastAPI locally
   Write-Host "→ uvicorn app.main:app --reload --port 8000"
-  & uvicorn app.main:app --reload --port 8000
+  RunRepo "uvicorn" @("app.main:app","--reload","--port","8000") | Write-Host
 }
 
+# ---------- Prod (full) helpers ----------
+# Minimal prod-like stack defined in docker-compose.prod.full.yml
+# - No pgAdmin, no host 5432 port publishing (internal only)
+# - Uses .env.docker for DB credentials
+
+$ProdEnvFile    = ".env.docker"
+$ProdComposeYml = "docker-compose.prod.full.yml"
+
+function up:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdEnvFile)))    { throw "Missing $ProdEnvFile in repo root." }
+  Invoke-Compose @("--env-file", $ProdEnvFile, "-f", $ProdComposeYml, "up", "-d")
+}
+
+function down:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("-f", $ProdComposeYml, "down", "--remove-orphans")
+}
+
+function restart:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("--env-file", $ProdEnvFile, "-f", $ProdComposeYml, "up", "-d", "--force-recreate")
+}
+
+function ps:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("-f", $ProdComposeYml, "ps")
+}
+
+function logs:prod {
+  param([string]$Service = "api")
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("-f", $ProdComposeYml, "logs", "-f", "--tail", "200", $Service)
+}
+
+function migrate:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("-f", $ProdComposeYml, "exec", "-T", "api", "python", "-m", "alembic", "upgrade", "head")
+}
+
+function current:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Invoke-Compose @("-f", $ProdComposeYml, "exec", "-T", "api", "alembic", "current")
+}
+
+function psql:prod {
+  if (-not (Test-Path (Join-Path $REPO_ROOT $ProdComposeYml))) { throw "Missing $ProdComposeYml in repo root." }
+  Load-EnvFile (Join-Path $REPO_ROOT $ProdEnvFile)
+  $user = if ($Env:POSTGRES_USER) { $Env:POSTGRES_USER } else { "postgres" }
+  $db   = if ($Env:POSTGRES_DB)   { $Env:POSTGRES_DB }   else { "detecktiv" }
+  Invoke-Compose @("-f", $ProdComposeYml, "exec", "-T", "postgres", "psql", "-U", $user, "-d", $db)
+}
+
+function health:prod {
+  param(
+    [int]$TimeoutSeconds = 60,
+    [int]$IntervalSeconds = 2
+  )
+  try {
+    Wait-Api-Healthy -TimeoutSeconds $TimeoutSeconds -IntervalSeconds $IntervalSeconds | Out-Null
+  } catch {
+    Write-Host "Health check failed." -ForegroundColor Yellow
+    throw
+  }
+}
+
+# --------------------------
+# Lightweight CLI dispatcher
+# --------------------------
+# Allows: .\task <name> [args], including colon-names like up:prod
+
+if ($MyInvocation.MyCommand.Path -and $PSCommandPath -and ($MyInvocation.MyCommand.Path -eq $PSCommandPath)) {
+  if ($args.Count -eq 0) {
+    help
+    exit 0
+  }
+  $task = $args[0]
+  $rest = @()
+  if ($args.Count -gt 1) { $rest = $args[1..($args.Count-1)] }
+
+  $fn = Get-Command -Name $task -CommandType Function -ErrorAction SilentlyContinue
+  if (-not $fn) {
+    Write-Host "Unknown task: $task" -ForegroundColor Yellow
+    help
+    exit 1
+  }
+
+  & $task @rest
+  exit $LASTEXITCODE
+}

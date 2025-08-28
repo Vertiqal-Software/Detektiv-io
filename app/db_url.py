@@ -16,6 +16,9 @@ def build_sqlalchemy_url_from_env() -> URL:
     port = int(os.getenv("POSTGRES_PORT", "5432"))
     db = os.getenv("POSTGRES_DB", "detecktiv")
 
+    # default to sslmode=disable unless overridden externally
+    query = {"sslmode": os.getenv("POSTGRES_SSLMODE", "disable")}
+
     return URL.create(
         drivername="postgresql+psycopg2",
         username=user or None,
@@ -23,7 +26,7 @@ def build_sqlalchemy_url_from_env() -> URL:
         host=host,
         port=port,
         database=db,
-        query={"sslmode": "disable"},
+        query=query,
     )
 
 
@@ -44,4 +47,15 @@ def mask_url_password(url: URL) -> str:
     )
 
 
-__all__ = ["build_sqlalchemy_url_from_env", "mask_url_password"]
+def db_url(mask_password: bool = True) -> str:
+    """
+    Back-compat convenience: return a DSN string, optionally with the password masked.
+
+    This satisfies callers that expect a function `db_url(mask_password=...)`
+    instead of working with SQLAlchemy URL objects directly.
+    """
+    url = build_sqlalchemy_url_from_env()
+    return mask_url_password(url) if mask_password else str(url)
+
+
+__all__ = ["build_sqlalchemy_url_from_env", "mask_url_password", "db_url"]

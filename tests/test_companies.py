@@ -18,6 +18,8 @@ def _seed_env(monkeypatch):
     monkeypatch.setenv("POSTGRES_DB", os.getenv("POSTGRES_DB", "detecktiv"))
     monkeypatch.setenv("POSTGRES_HOST", os.getenv("POSTGRES_HOST", "127.0.0.1"))
     monkeypatch.setenv("POSTGRES_PORT", os.getenv("POSTGRES_PORT", "5432"))
+    # Ensure test mode to allow DB reset and predictable IDs
+    monkeypatch.setenv("RUN_DB_TESTS", "1")
 
 
 def _client(monkeypatch):
@@ -90,3 +92,21 @@ def test_list_companies(monkeypatch):
     items = rlist.json()
     names = {i["name"] for i in items}
     assert n1 in names and n2 in names
+
+
+def test_request_id_header_and_masked_dsn(monkeypatch):
+    client = _client(monkeypatch)
+
+    # request-id propagation
+    custom_id = "test-" + uuid.uuid4().hex[:8]
+    r = client.get("/health", headers={"x-request-id": custom_id})
+    assert r.status_code == 200
+    assert r.headers.get("x-request-id") == custom_id
+
+    # DB health masks password if present
+    r2 = client.get("/health/db")
+    assert r2.status_code == 200
+    dsn = r2.json().get("dsn", "")
+    pw = os.getenv("POSTGRES_PASSWORD", "")
+    if pw:
+        assert pw not in dsn, "Password should not appear in DSN"

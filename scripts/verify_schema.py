@@ -8,70 +8,77 @@ try:
 except Exception:
     pass
 
-def db_url():
-    url = os.getenv("DATABASE_URL")
-    if url:
-        return url
 
-    host = os.getenv("POSTGRES_HOST", "localhost")
+def db_url() -> str:
+    user = os.getenv("POSTGRES_USER", "postgres")
+    pwd  = os.getenv("POSTGRES_PASSWORD", "")
+    host = os.getenv("POSTGRES_HOST", "127.0.0.1")
     port = os.getenv("POSTGRES_PORT", "5432")
     db   = os.getenv("POSTGRES_DB", "detecktiv")
-    user = os.getenv("POSTGRES_USER", "postgres")
-    pwd  = os.getenv("POSTGRES_PASSWORD")
     ssl  = os.getenv("POSTGRES_SSLMODE", "disable")
-    if not pwd:
-        raise RuntimeError("POSTGRES_PASSWORD not set (put it in .env or export it in your shell).")
     return f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}?sslmode={ssl}"
+
+
+def show_schema(conn, schema: str):
+    print(f"\n[Tables in {schema}]")
+    insp = inspect(conn)
+    try:
+        tables = sorted(insp.get_table_names(schema=schema))
+        print(tables)
+    except Exception as e:
+        print(f"  (error listing tables: {e})")
+        return
+
+    for t in tables:
+        print(f"\n[{schema}.{t} columns]")
+        try:
+            for c in insp.get_columns(t, schema=schema):
+                print(f" - {c['name']}: nullable={c['nullable']}")
+        except Exception as e:
+            print(f"  (error reading columns: {e})")
+
 
 def main():
     url = db_url()
-    print("[info] DB URL:", url.split("://")[0] + "://***")
+    pw = os.getenv("POSTGRES_PASSWORD") or ""
+    masked = url.replace(pw, "***") if pw else url
+    print("[info] URL:", masked)
 
-    eng = create_engine(url, pool_pre_ping=True)
+    schema = (
+        os.getenv("ALEMBIC_SCHEMA")
+        or os.getenv("POSTGRES_SCHEMA")
+        or os.getenv("DB_SCHEMA")
+        or "app"
+    )
+
+    eng = create_engine(url, pool_pre_ping=True, future=True)
     with eng.connect() as conn:
-        insp = inspect(conn)
+        # Match Alembic behavior
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+        conn.execute(text(f'SET search_path TO "{schema}", public'))
 
-        tables = sorted(insp.get_table_names())
-        print("\n[Tables]")
-        print(tables)
+        db, cur_schema, host, port = conn.execute(
+            text("select current_database(), current_schema(), inet_server_addr(), inet_server_port()")
+        ).one()
+        spath = conn.execute(text("SHOW search_path")).scalar()
+        print(f"[info] Connected -> db={db}, current_schema={cur_schema}, host={host}, port={port}")
+        print(f"[info] search_path: {spath}")
 
-        # Default tenant (only if table exists)
-        if "tenants" in tables:
-            tid = conn.execute(text("SELECT id FROM tenants WHERE tenant_key='default'")).scalar()
-            print("\n[Default tenant]")
-            print("default tenant id:", tid)
+        # Show both target schema and public
+        show_schema(conn, schema)
+        show_schema(conn, "public")
+
+        # Default tenant check in target schema
+        print(f"\n[Default tenant in {schema}] ", end="")
+        exists = conn.execute(text("select to_regclass(:qname)"), {"qname": f"{schema}.tenants"}).scalar()
+        if exists:
+            tid = conn.execute(text(f"SELECT id FROM {schema}.tenants WHERE tenant_key='default'")).scalar()
+            print("id:", tid)
         else:
-            print("\n[Default tenant]")
-            print("tenants table is missing")
-
-        if "companies" in tables:
-            cols = insp.get_columns("companies")
-            col_map = {c["name"]: c for c in cols}
-            print("\n[companies columns]")
-            for c in ("id","tenant_id","company_number","name","status","incorporated_on","jurisdiction","last_accounts","created_at","updated_at"):
-                if c in col_map:
-                    print(f" - {c}: nullable={col_map[c]['nullable']}")
-                else:
-                    print(f" - {c}: MISSING")
-
-            print("\n[companies FKs]")
-            for fk in insp.get_foreign_keys("companies"):
-                print(" -", fk.get("name"), "->", fk.get("referred_table"), fk.get("constrained_columns"))
-
-            print("\n[companies indexes]")
-            for ix in insp.get_indexes("companies"):
-                print(" -", ix["name"], ix["column_names"])
-
-            print("\n[companies unique constraints]")
-            for uc in insp.get_unique_constraints("companies"):
-                print(" -", uc.get("name"), uc.get("column_names"))
-
-        if "source_events" in tables:
-            print("\n[source_events indexes]")
-            for ix in insp.get_indexes("source_events"):
-                print(" -", ix["name"], ix["column_names"])
+            print("table missing")
 
     print("\n[OK] verification done")
+
 
 if __name__ == "__main__":
     main()

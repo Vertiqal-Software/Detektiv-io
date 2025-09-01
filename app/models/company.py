@@ -145,6 +145,8 @@ class Company(Base):
             name="ck_companies_valid_data_source",
         ),
         Index("ix_companies_name", "name"),
+        # Added: non-unique composite index to speed per-tenant lookups by name
+        Index("ix_companies_tenant_name", "tenant_id", "name"),
     )
 
     # Aliases for forward/backward compatibility with code calling new names

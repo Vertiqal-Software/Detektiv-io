@@ -1,18 +1,24 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 echo "== Entrypoint starting =="
 
-# Normalize env (defaults for dev)
+# Defaults for DB connectivity if not set in the environment
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 POSTGRES_HOST="${POSTGRES_HOST:-postgres}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_DB="${POSTGRES_DB:-detecktiv}"
+
+# Configuration for Alembic; allow overriding path if needed
 ALEMBIC_CONFIG="${ALEMBIC_CONFIG:-/app/alembic.ini}"
 RUN_MIGRATIONS_ON_BOOT="${RUN_MIGRATIONS_ON_BOOT:-1}"  # default: run migrations (dev-friendly)
 
 export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_HOST POSTGRES_PORT POSTGRES_DB ALEMBIC_CONFIG RUN_MIGRATIONS_ON_BOOT
+
+# >>> ADD: ensure Alembic can import 'app' no matter where it runs from
+export PYTHONPATH="/app:${PYTHONPATH:-}"
+# <<< END ADD
 
 echo "ALEMBIC_CONFIG=$ALEMBIC_CONFIG"
 cd /app 2>/dev/null || true
@@ -30,7 +36,7 @@ echo "Waiting for Postgres at ${POSTGRES_HOST}:${POSTGRES_PORT}..."
 i=0
 while [ $i -lt 60 ]; do
   i=$((i+1))
-  if PGPASSWORD="${POSTGRES_PASSWORD}" \
+  if PGPASSWORD="$POSTGRES_PASSWORD" \
      psql "host=${POSTGRES_HOST} port=${POSTGRES_PORT} dbname=${POSTGRES_DB} user=${POSTGRES_USER} sslmode=disable" \
      -c "select 1" >/dev/null 2>&1; then
     echo "Postgres is ready."
@@ -62,3 +68,4 @@ python -m alembic upgrade head
 
 echo "== Entrypoint migration phase complete, starting API =="
 exec "$@"
+

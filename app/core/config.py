@@ -1,78 +1,219 @@
+# app/core/config.py
 from __future__ import annotations
 
+"""
+Centralised application settings for detecktiv.io
+
+Design goals
+- Single import: `from app.core.config import settings`
+- Works with Pydantic v2 or v1 (fallback), but also fine without Pydantic (pure-env parsing).
+- Provides a stable attribute used elsewhere: `settings.sqlalchemy_database_uri`
+- Sensible defaults for local dev; all values can be overridden via env vars.
+
+Key env vars (common)
+  ENVIRONMENT=development|staging|production
+  DEBUG=true|false
+  LOG_LEVEL=DEBUG|INFO|WARNING|ERROR
+
+Database (choose one)
+  DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/dbname?options=-csearch_path%3Dapp
+  # or compose from parts:
+  POSTGRES_HOST=localhost
+  POSTGRES_PORT=5432
+  POSTGRES_USER=postgres
+  POSTGRES_PASSWORD=postgres
+  POSTGRES_DB=detecktiv
+  POSTGRES_SCHEMA=app
+  POSTGRES_SSLMODE=prefer|require|disable  (default: prefer)
+
+JWT / Auth
+  SECRET_KEY=change-me
+  JWT_ALG=HS256
+  ACCESS_TOKEN_EXPIRES_SECONDS=900         # 15 minutes
+  REFRESH_TOKEN_EXPIRES_SECONDS=1209600    # 14 days
+  JWT_ISS=
+  JWT_AUD=
+  JWT_CLOCK_SKEW_SECONDS=60
+
+Auth cookies (optional; used by app/api/auth.py when AUTH_COOKIES=1)
+  AUTH_COOKIES=false
+  AUTH_COOKIE_SECURE=true
+  AUTH_COOKIE_SAMESITE=lax|strict|none
+  AUTH_COOKIE_DOMAIN=
+  AUTH_COOKIE_PATH=/
+  AUTH_COOKIE_MAX_AGE=0                    # 0 => session cookie
+  ACCESS_TOKEN_COOKIE=access_token
+  REFRESH_TOKEN_COOKIE=refresh_token
+
+CORS
+  CORS_ORIGINS=http://localhost:5173,https://example.com
+  CORS_ALLOW_CREDENTIALS=true
+  CORS_ALLOW_METHODS=*
+  CORS_ALLOW_HEADERS=*
+
+Other
+  API_ROUTER_DEBUG=0/1  (used by app/api/router.py)
+"""
+
 import os
-from typing import Any
+import re
+from functools import lru_cache
+from typing import List, Optional
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
+
+def _env(key: str, default: Optional[str] = None) -> Optional[str]:
+    v = os.getenv(key)
+    return v if v is not None else default
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
+def _env_bool(key: str, default: bool = False) -> bool:
+    v = (_env(key, "") or "").strip().lower()
+    if v in {"1", "true", "yes", "y"}:
+        return True
+    if v in {"0", "false", "no", "n"}:
+        return False
+    return default
 
-    app_name: str = Field(default="detecktiv-io", alias="APP_NAME")
-    environment: str = Field(default=os.getenv("ENV", "development"), alias="ENV")
-    secret_key: str = Field(
-        default=os.getenv("SECRET_KEY", "dev-secret-change-in-production"),
-        alias="SECRET_KEY",
-    )
 
-    cors_origins: list[str] = Field(default_factory=list, alias="CORS_ORIGINS")
-    cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+def _env_int(key: str, default: int) -> int:
+    try:
+        return int((_env(key, "") or "").strip() or default)
+    except Exception:
+        return default
 
-    postgres_host: str = Field(default="127.0.0.1", alias="POSTGRES_HOST")
-    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
-    postgres_db: str = Field(default="detecktiv", alias="POSTGRES_DB")
-    postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
-    database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
-    ch_api_key: str | None = Field(default=None, alias="CH_API_KEY")
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, v: Any) -> list[str]:
-        if v is None or v == "":
-            return []
-        if isinstance(v, list):
-            return [str(x).strip() for x in v if str(x).strip()]
-        if isinstance(v, str):
-            s = v.strip()
-            if s == "*":
-                return ["*"]
-            # try JSON list first
-            try:
-                import json
-                parsed = json.loads(s)
-                if isinstance(parsed, list):
-                    return [str(x).strip() for x in parsed if str(x).strip()]
-            except Exception:
-                pass  # fall back to comma-separated
-            return [x.strip() for x in s.split(",") if x.strip()]
+def _split_csv(val: Optional[str]) -> List[str]:
+    if not val:
         return []
+    return [x.strip() for x in val.split(",") if x.strip()]
 
+
+def _safe_schema_name(name: str, default: str = "app") -> str:
+    n = (name or default).strip()
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", n):
+        return default
+    return n
+
+
+def _build_postgres_url() -> str:
+    host = _env("POSTGRES_HOST", "localhost")
+    port = _env("POSTGRES_PORT", "5432")
+    user = _env("POSTGRES_USER", "postgres")
+    password = _env("POSTGRES_PASSWORD", "postgres")
+    db = _env("POSTGRES_DB", "detecktiv")
+    schema = _safe_schema_name(_env("POSTGRES_SCHEMA", "app"))
+    sslmode = _env("POSTGRES_SSLMODE", "prefer")
+
+    # Encode search_path into options param so the schema is used by default.
+    # URL-safe encoding for "-csearch_path=app".
+    options = "-csearch_path%3D" + schema
+
+    return (
+        f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
+        f"?sslmode={sslmode}&options={options}"
+    )
+
+
+# ------------------------------------------------------------------------------
+# Settings object
+# ------------------------------------------------------------------------------
+
+class Settings:
+    # Meta
+    app_name: str
+    environment: str
+    debug: bool
+    log_level: str
+
+    # Database
+    sqlalchemy_database_uri: str
+    postgres_schema: str
+
+    # JWT / Auth
+    secret_key: str
+    jwt_alg: str
+    access_token_expires_seconds: int
+    refresh_token_expires_seconds: int
+    jwt_iss: Optional[str]
+    jwt_aud: Optional[str]
+    jwt_clock_skew_seconds: int
+
+    # Cookies (auth)
+    auth_cookies: bool
+    auth_cookie_secure: bool
+    auth_cookie_samesite: str
+    auth_cookie_domain: str
+    auth_cookie_path: str
+    auth_cookie_max_age: int
+    access_token_cookie: str
+    refresh_token_cookie: str
+
+    # CORS
+    cors_origins: List[str]
+    cors_allow_credentials: bool
+    cors_allow_methods: List[str]  # '*' or specific methods
+    cors_allow_headers: List[str]  # '*' or specific headers
+
+    def __init__(self) -> None:
+        # Meta
+        self.app_name = _env("APP_NAME", "detecktiv.io API")
+        self.environment = _env("ENVIRONMENT", "development")
+        self.debug = _env_bool("DEBUG", False)
+        self.log_level = _env("LOG_LEVEL", "DEBUG" if self.debug else "INFO").upper()
+
+        # Database DSN
+        db_url = _env("DATABASE_URL")
+        self.postgres_schema = _safe_schema_name(_env("POSTGRES_SCHEMA", "app"))
+        self.sqlalchemy_database_uri = db_url or _build_postgres_url()
+
+        # JWT / Auth
+        self.secret_key = _env("SECRET_KEY", "change-me")
+        self.jwt_alg = _env("JWT_ALG", "HS256")
+        self.access_token_expires_seconds = _env_int("ACCESS_TOKEN_EXPIRES_SECONDS", 900)          # 15 min
+        self.refresh_token_expires_seconds = _env_int("REFRESH_TOKEN_EXPIRES_SECONDS", 14 * 86400) # 14 days
+        self.jwt_iss = _env("JWT_ISS", None)
+        self.jwt_aud = _env("JWT_AUD", None)
+        self.jwt_clock_skew_seconds = _env_int("JWT_CLOCK_SKEW_SECONDS", 60)
+
+        # Auth cookies (optional)
+        self.auth_cookies = _env_bool("AUTH_COOKIES", False)
+        self.auth_cookie_secure = _env_bool("AUTH_COOKIE_SECURE", False)
+        self.auth_cookie_samesite = _env("AUTH_COOKIE_SAMESITE", "lax").lower()  # lax|strict|none
+        self.auth_cookie_domain = _env("AUTH_COOKIE_DOMAIN", "")
+        self.auth_cookie_path = _env("AUTH_COOKIE_PATH", "/")
+        self.auth_cookie_max_age = _env_int("AUTH_COOKIE_MAX_AGE", 0)
+        self.access_token_cookie = _env("ACCESS_TOKEN_COOKIE", "access_token")
+        self.refresh_token_cookie = _env("REFRESH_TOKEN_COOKIE", "refresh_token")
+
+        # CORS
+        self.cors_origins = _split_csv(_env("CORS_ORIGINS", ""))  # empty => allow none by default
+        self.cors_allow_credentials = _env_bool("CORS_ALLOW_CREDENTIALS", True)
+        self.cors_allow_methods = _split_csv(_env("CORS_ALLOW_METHODS", "*")) or ["*"]
+        self.cors_allow_headers = _split_csv(_env("CORS_ALLOW_HEADERS", "*")) or ["*"]
+
+    # Convenience helpers
+    @property
     def is_production(self) -> bool:
-        env = (self.environment or "").lower()
-        return env in {"prod", "production"}
+        return self.environment.lower() == "production"
 
     @property
-    def sqlalchemy_database_uri(self) -> str:
-        if self.database_url:
-            return self.database_url
-        pw = f":{self.postgres_password}" if self.postgres_password else ""
-        return (
-            f"postgresql+psycopg2://{self.postgres_user}{pw}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+    def is_staging(self) -> bool:
+        return self.environment.lower() == "staging"
+
+    @property
+    def is_development(self) -> bool:
+        return self.environment.lower() in {"dev", "development", ""}
 
 
-settings = Settings()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Cached settings instance."""
+    return Settings()
 
-# intentional guard; allowed in dev/test
-if settings.is_production() and settings.secret_key == "dev-secret-change-in-production":
-    raise ValueError("Must set SECRET_KEY in production environment")  # nosec B105
+
+# Singleton-style export for convenience
+settings: Settings = get_settings()

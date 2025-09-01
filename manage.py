@@ -12,22 +12,28 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
+
 def _run(cmd: list[str]) -> int:
     print("→", " ".join(cmd))
     return subprocess.call(cmd, cwd=str(REPO_ROOT), env=os.environ.copy())
+
 
 def _alembic(*args: str) -> int:
     # Delegates to "python -m alembic ..." so it works in venv/CI
     return _run([sys.executable, "-m", "alembic", *args])
 
+
 def cmd_db_current() -> int:
     return _alembic("current")
+
 
 def cmd_db_upgrade() -> int:
     return _alembic("upgrade", "head")
 
+
 def cmd_db_downgrade_one() -> int:
     return _alembic("downgrade", "-1")
+
 
 def cmd_check_db() -> int:
     # Non-fatal connectivity probe (mirrors test expectations)
@@ -47,6 +53,7 @@ def cmd_check_db() -> int:
         print("select 1 ->", c.execute(text("select 1")).scalar_one())
     return 0
 
+
 def cmd_db_seed() -> int:
     # Delegate to PowerShell task if available; otherwise no-op
     ps_task = REPO_ROOT / "task.ps1"
@@ -54,6 +61,7 @@ def cmd_db_seed() -> int:
         return _run(["pwsh", "-NoProfile", "-File", str(ps_task), "seed"])
     print("Seed task not available; skipping.")
     return 0
+
 
 def main() -> int:
     actions = {
@@ -71,6 +79,7 @@ def main() -> int:
         print(f"Unknown command: {sys.argv[1]}")
         return 1
     return fn()
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

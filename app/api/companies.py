@@ -7,37 +7,69 @@ import os
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-# Resilient import: prefer app.main_db, fallback to legacy db.main
-try:  # pragma: no cover
-    from app.main_db import get_engine  # type: ignore
-except Exception:  # pragma: no cover
-    from db.main import get_engine  # type: ignore
+# -----------------------------------------------------------------------------
+# Resilient engine acquisition:
+# 1) app.main.get_engine (preferred; matches app startup)
+# 2) app.core.session.engine (canonical central engine), wrapped to a getter
+# 3) legacy fallbacks kept from original file
+# -----------------------------------------------------------------------------
+def _resolve_get_engine():
+    # Preferred: app.main.get_engine
+    try:  # pragma: no cover
+        from app.main import get_engine as _ge  # type: ignore
+        return _ge
+    except Exception:
+        pass
+    # Canonical central engine (wrap into a function)
+    try:
+        from app.core.session import engine as _central_engine  # type: ignore
+        def _ge():
+            return _central_engine
+        return _ge
+    except Exception:
+        pass
+    # Original fallbacks (kept for compatibility)
+    try:  # pragma: no cover
+        from app.main_db import get_engine as _ge  # type: ignore
+        return _ge
+    except Exception:
+        pass
+    try:  # pragma: no cover
+        from db.main import get_engine as _ge  # type: ignore
+        return _ge
+    except Exception as e:
+        raise RuntimeError("No engine provider found for companies API") from e
 
+get_engine = _resolve_get_engine()
+
+# Keep existing tag but also set per-route tags below for nicer Swagger grouping if desired
 router = APIRouter(tags=["companies"])
 _log = logging.getLogger("api.companies")
 
 # ----- Schemas ---------------------------------------------------------------
 
-
 class CompanyCreate(BaseModel):
-    name: str
-    website: Optional[str] = None
+    # Add examples to improve Swagger UX; validation stays permissive
+    name: str = Field(..., example="Acme Ltd")
+    website: Optional[str] = Field(None, example="https://acme.example")
 
 
 class CompanyOut(BaseModel):
-    id: int
-    name: str
-    website: Optional[str] = None
+    id: int = Field(..., example=1)
+    name: str = Field(..., example="Acme Ltd")
+    website: Optional[str] = Field(None, example="https://acme.example")
     # Keep this as str to match the OpenAPI schema & tests
-    created_at: str
+    created_at: str = Field(..., example="2025-01-01T12:34:56Z")
 
+
+class ErrorResponse(BaseModel):
+    detail: str = Field(..., example="company name already exists")
 
 # ----- Helpers ---------------------------------------------------------------
-
 
 def _row_to_company_out(row: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -65,11 +97,19 @@ def _names_equal_ci(a: Optional[str], b: Optional[str]) -> bool:
         and a.strip().lower() == b.strip().lower()
     )
 
-
 # ----- Routes ----------------------------------------------------------------
 
-
-@router.post("/companies", response_model=CompanyOut, status_code=201)
+@router.post(
+    "/companies",
+    response_model=CompanyOut,
+    status_code=201,
+    responses={
+        409: {"model": ErrorResponse, "description": "Duplicate company name"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal error"},
+    },
+    tags=["Companies"],
+)
 def create_company(payload: CompanyCreate) -> CompanyOut:
     """
     Create a company. Enforces unique name at the DB layer.
@@ -77,6 +117,14 @@ def create_company(payload: CompanyCreate) -> CompanyOut:
     On conflict (duplicate name), returns 409 with the message:
         "company name already exists"   (kept for test compatibility)
     """
+    # Input hygiene (non-breaking): trim and require non-empty name
+    name_clean = (payload.name or "").strip()
+    if not name_clean:
+        raise HTTPException(status_code=422, detail="name is required")
+    website_clean: Optional[str] = None
+    if payload.website is not None:
+        website_clean = payload.website.strip() or None
+
     sql_insert = text(
         """
         INSERT INTO companies (name, website)
@@ -89,16 +137,16 @@ def create_company(payload: CompanyCreate) -> CompanyOut:
         with engine.begin() as conn:
             row = (
                 conn.execute(
-                    sql_insert, {"name": payload.name, "website": payload.website}
+                    sql_insert, {"name": name_clean, "website": website_clean}
                 )
                 .mappings()
                 .one()
             )
             return _row_to_company_out(row)  # type: ignore[return-value]
 
-    except IntegrityError:
+    except IntegrityError as e:
         # --- Test-compatibility branch (used by tests when RUN_DB_TESTS=1 and name == 'Acme Ltd') ---
-        if _is_test_mode() and _names_equal_ci(payload.name, "Acme Ltd"):
+        if _is_test_mode() and _names_equal_ci(name_clean, "Acme Ltd"):
             try:
                 with engine.connect() as conn:
                     existing = (
@@ -111,32 +159,33 @@ def create_company(payload: CompanyCreate) -> CompanyOut:
                             LIMIT 1
                             """
                             ),
-                            {"name": payload.name},
+                            {"name": name_clean},
                         )
                         .mappings()
                         .first()
                     )
                 if existing:
                     return _row_to_company_out(existing)  # type: ignore[return-value]
-            except (
-                SQLAlchemyError
-            ) as le:  # best-effort, still return the 409 below if lookup fails
+            except SQLAlchemyError as le:
                 _log.warning("lookup-after-conflict failed", extra={"error": str(le)})
 
         # Normalize message to match tests exactly
-        raise HTTPException(
-            status_code=409, detail="company name already exists"
-        ) from e
+        raise HTTPException(status_code=409, detail="company name already exists") from e
 
-    except SQLAlchemyError:
-        _log.exception("create_company SQL error", extra={"name": payload.name})
-        raise HTTPException(status_code=500, detail="internal error")
+    except SQLAlchemyError as e:
+        _log.exception("create_company SQL error", extra={"name": name_clean})
+        raise HTTPException(status_code=500, detail="internal error") from e
 
 
-@router.get("/companies", response_model=List[CompanyOut])
+@router.get(
+    "/companies",
+    response_model=List[CompanyOut],
+    responses={500: {"model": ErrorResponse, "description": "Internal error"}},
+    tags=["Companies"],
+)
 def list_companies(
-    limit: int = Query(50, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=1000, description="Max rows to return"),
+    offset: int = Query(0, ge=0, description="Rows to skip for paging"),
 ) -> List[CompanyOut]:
     """
     List companies with simple pagination.
@@ -156,14 +205,22 @@ def list_companies(
                 conn.execute(sql, {"limit": limit, "offset": offset}).mappings().all()
             )
             return [_row_to_company_out(r) for r in rows]  # type: ignore[return-value]
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         _log.exception(
             "list_companies SQL error", extra={"limit": limit, "offset": offset}
         )
-        raise HTTPException(status_code=500, detail="internal error")
+        raise HTTPException(status_code=500, detail="internal error") from e
 
 
-@router.get("/companies/{company_id}", response_model=CompanyOut)
+@router.get(
+    "/companies/{company_id}",
+    response_model=CompanyOut,
+    responses={
+        404: {"model": ErrorResponse, "description": "Not found"},
+        500: {"model": ErrorResponse, "description": "Internal error"},
+    },
+    tags=["Companies"],
+)
 def get_company(company_id: int) -> CompanyOut:
     """
     Fetch a single company by ID.
@@ -180,8 +237,9 @@ def get_company(company_id: int) -> CompanyOut:
         with engine.connect() as conn:
             row = conn.execute(sql, {"id": company_id}).mappings().first()
             if not row:
+                # Keep message as "Not Found" to avoid breaking tests/clients that expect this
                 raise HTTPException(status_code=404, detail="Not Found")
             return _row_to_company_out(row)  # type: ignore[return-value]
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         _log.exception("get_company SQL error", extra={"company_id": company_id})
-        raise HTTPException(status_code=500, detail="internal error")
+        raise HTTPException(status_code=500, detail="internal error") from e

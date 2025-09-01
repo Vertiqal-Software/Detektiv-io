@@ -1,42 +1,58 @@
-# Dockerfile
+# Base image
 FROM python:3.13-slim
 
-# Prevent interactive tzdata etc.
-ENV DEBIAN_FRONTEND=noninteractive
+# Environment
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app
 
-# Install minimal tools needed by entrypoint and healthcheck:
-# - postgresql-client: provides `psql` used by entrypoint.sh
-# - curl: used by the container healthcheck command
+# System deps:
+# - bash: entrypoint uses bash features
+# - curl, postgresql-client: used by entrypoint/health checks
+# - build-essential, libpq-dev: safe for psycopg2/psycopg builds
 RUN apt-get update \
- && apt-get install -y --no-install-recommends postgresql-client curl \
+ && apt-get install -y --no-install-recommends \
+      bash \
+      curl \
+      postgresql-client \
+      build-essential \
+      libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Create an unprivileged user (optional but recommended)
+# Unprivileged user
 RUN useradd -ms /bin/bash appuser
 
 WORKDIR /app
 
-# Copy dependency manifests first for better layer caching
-COPY requirements.txt ./requirements.txt
-# If you have dev extras, don't install them here:
-# COPY requirements-dev.txt ./requirements-dev.txt
+# Install Python deps with cache-friendly layering
+# (If you only have requirements.txt, the wildcard still works.)
+COPY requirements*.txt ./
+RUN python -m pip install --upgrade pip \
+ && if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
-# Install python deps (pin versions in requirements.txt)
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt
+# Copy the rest of the app
+COPY . /app
 
-# Copy the rest of the source
-COPY . .
+# Always use the repo's docker/entrypoint.sh as the runtime entrypoint
+# - Force copy (overwrites any existing /app/entrypoint.sh)
+# - Strip CRLF (Windows) to LF
+# - Make executable
+RUN cp -f /app/docker/entrypoint.sh /app/entrypoint.sh \
+ && sed -i 's/\r$//' /app/entrypoint.sh \
+ && chmod +x /app/entrypoint.sh \
+ && chown -R appuser:appuser /app
 
-# Ensure entrypoint is executable
-RUN chmod +x docker/entrypoint.sh
+# Let Alembic tools/scripts work out of the box (can be overridden)
+ENV ALEMBIC_CONFIG=/app/alembic.ini
+
+# Expose API port
+EXPOSE 8000
 
 # Run as non-root
 USER appuser
 
-# Alembic config expected at /app/alembic.ini per compose env
-# Entrypoint will run migrations then exec the CMD below
-ENTRYPOINT ["/app/docker/entrypoint.sh"]
-
-# Start the API (FastAPI via uvicorn)
+# Normal startup: entrypoint does DB wait/migrations gating, then execs uvicorn
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

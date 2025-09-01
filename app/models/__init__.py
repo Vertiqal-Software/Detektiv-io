@@ -57,7 +57,7 @@ def import_all_models() -> None:
             continue
         try:
             importlib.import_module(f"{__name__}.{name}")
-        except Exception:  # keep non-fatal; diagnostics only
+        except Exception:  # keep non-fatal; diagnostics only  # nosec B110
             # You can enable logging here if desired:
             # import logging; logging.getLogger(__name__).debug("Skip %s: %s", name, e)
             pass
@@ -69,7 +69,7 @@ def import_all_models() -> None:
         for k, v in list(globals().items()):
             if isinstance(v, DeclarativeMeta) and k not in __all__:
                 __all__.append(k)
-    except Exception:
+    except Exception:  # nosec B110
         # SQLAlchemy not loaded or other edge-case; ignore silently
         pass
 

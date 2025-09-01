@@ -45,7 +45,7 @@ if _async_client_ctor is None and _sync_client_ctor is None:
         _sync_client_ctor = _LegacySyncCtor
     except (
         Exception
-    ) :  # nosec B110 - final optional fallback; endpoint still works without CH data
+    ):  # nosec B110 - final optional fallback; endpoint still works without CH data
         pass
 
 

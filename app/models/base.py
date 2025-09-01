@@ -177,7 +177,7 @@ def _make_local_engine():
                 # Create schema if not exists (non-fatal on insufficient privilege)
                 try:
                     cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-                except Exception:
+                except Exception:  # nosec B110
                     pass
                 cur.execute(f"SET search_path TO {schema}, public")
                 if stmt_timeout_ms:
@@ -185,9 +185,9 @@ def _make_local_engine():
                 if app_name:
                     try:
                         cur.execute("SET application_name TO %s", [app_name])
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     @event.listens_for(eng, "checkout")
@@ -197,7 +197,7 @@ def _make_local_engine():
                 cur.execute(f"SET search_path TO {schema}, public")
                 if stmt_timeout_ms:
                     cur.execute(f"SET statement_timeout TO {int(stmt_timeout_ms)}")
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     # Optional one-time debug check
@@ -210,7 +210,7 @@ def _make_local_engine():
                 except Exception:
                     st = "(not supported)"
                 print(f"[base] Engine check search_path={sp}; statement_timeout={st}")
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     return eng

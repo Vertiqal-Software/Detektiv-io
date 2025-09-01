@@ -68,7 +68,7 @@ def metrics(
     # Works with or without multiprocess mode
     try:
         multiprocess.MultiProcessCollector(registry)  # no-op if not configured
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     try:

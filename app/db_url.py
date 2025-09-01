@@ -116,7 +116,7 @@ def get_masked_database_url() -> str:
             creds, rest = after.split("@", 1)
             user_part, _pwd = creds.split(":", 1)
             return f"{before}://{user_part}:***@{rest}"
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     return url

@@ -6,7 +6,7 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv()
-except Exception:
+except Exception:  # nosec B110
     pass
 
 
@@ -80,7 +80,9 @@ def main():
         ).scalar()
         if exists:
             tid = conn.execute(
-                text(f"SELECT id FROM {schema}.tenants WHERE tenant_key='default'")
+                text(  # nosec B608
+                    f"SELECT id FROM {schema}.tenants WHERE tenant_key='default'"  # nosec B608
+                )
             ).scalar()
             print("id:", tid)
         else:

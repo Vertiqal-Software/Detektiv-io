@@ -167,7 +167,9 @@ class TestCompanyService:
     def test_update_company_duplicate_name(self, company_service: CompanyService):
         """Test updating company to duplicate name raises error."""
         # Create two companies
-        company1 = company_service.create_company(CompanyCreate(name="Company One"))
+        company1 = company_service.create_company(  # noqa: F841
+            CompanyCreate(name="Company One")
+        )  # noqa: F841
         company2 = company_service.create_company(CompanyCreate(name="Company Two"))
 
         # Try to update company2 to have the same name as company1

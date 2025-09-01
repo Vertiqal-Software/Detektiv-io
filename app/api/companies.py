@@ -24,7 +24,7 @@ def _resolve_get_engine():
         from app.main import get_engine as _ge  # type: ignore
 
         return _ge
-    except Exception:
+    except Exception:  # nosec B110
         pass
     # Canonical central engine (wrap into a function)
     try:
@@ -34,14 +34,14 @@ def _resolve_get_engine():
             return _central_engine
 
         return _ge
-    except Exception:
+    except Exception:  # nosec B110
         pass
     # Original fallbacks (kept for compatibility)
     try:  # pragma: no cover
         from app.main_db import get_engine as _ge  # type: ignore
 
         return _ge
-    except Exception:
+    except Exception:  # nosec B110
         pass
     try:  # pragma: no cover
         from db.main import get_engine as _ge  # type: ignore

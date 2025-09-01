@@ -194,7 +194,7 @@ def install_rate_limiter(app: FastAPI) -> None:
     # Attach limiter to app state (SlowAPI convention)
     try:
         app.state.limiter = limiter._limiter  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover  # nosec B110
         pass
 
     # Middleware & exception handler

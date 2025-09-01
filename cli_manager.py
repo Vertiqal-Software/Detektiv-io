@@ -229,7 +229,9 @@ def db_seed(reset):
                     existing = service.get_company_by_name(company_data.name)
                     if existing:
                         if not reset:
-                            click.echo(f"Skipping existing company: {company_data.name}")
+                            click.echo(
+                                f"Skipping existing company: {company_data.name}"
+                            )
                             continue
 
                     company = service.create_company(company_data)

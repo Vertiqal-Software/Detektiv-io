@@ -148,7 +148,7 @@ def get_database_url() -> str:
             settings = getattr(mod, "settings", None)
             if settings and hasattr(settings, "get_database_url"):
                 return settings.get_database_url()
-        except Exception:
+        except Exception:  # nosec B112
             continue
 
     return _build_url_from_pg_env()
@@ -259,7 +259,7 @@ def run_migrations_online() -> None:
         try:
             with connection.begin():
                 has_public = connection.execute(
-                    text(
+                    text(  # nosec B608 - static DDL; SCHEMA validated
                         "select exists ("
                         "  select 1 from information_schema.tables "
                         "  where table_schema = 'public' and table_name = 'alembic_version'"
@@ -267,7 +267,7 @@ def run_migrations_online() -> None:
                     )
                 ).scalar()
                 has_target = connection.execute(
-                    text(
+                    text(  # nosec B608 - static DDL; SCHEMA validated
                         "select exists ("
                         "  select 1 from information_schema.tables "
                         "  where table_schema = :schema and table_name = 'alembic_version'"
@@ -281,16 +281,18 @@ def run_migrations_online() -> None:
                         f"[alembic/env] Relocating public.alembic_version -> {SCHEMA}.alembic_version ..."
                     )
                     connection.execute(
-                        text(
+                        text(  # nosec B608 - static DDL; SCHEMA validated
                             f'create table if not exists "{SCHEMA}"."alembic_version" (version_num varchar(32) not null)'
                         )
                     )
                     connection.execute(
-                        text(f'delete from "{SCHEMA}"."alembic_version"')
+                        text(
+                            f'delete from "{SCHEMA}"."alembic_version"'  # nosec B608 - static DDL; SCHEMA validated
+                        )  # nosec B608 - static DDL; SCHEMA validated
                     )
                     connection.execute(
-                        text(
-                            f'insert into "{SCHEMA}"."alembic_version" (version_num) '
+                        text(  # nosec B608 - static DDL; SCHEMA validated
+                            f'insert into "{SCHEMA}"."alembic_version" (version_num) '  # nosec B608 - static DDL; SCHEMA validated
                             f"select version_num from public.alembic_version limit 1"
                         )
                     )

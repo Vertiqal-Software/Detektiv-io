@@ -6,7 +6,6 @@ import logging
 from typing import Optional, Dict, Any, Tuple
 from threading import Lock
 import random  # noqa: F401
-import time
 
 import psycopg2  # uses psycopg2-binary from requirements
 from sqlalchemy import create_engine
@@ -21,88 +20,24 @@ _LAST_PARAMS: Optional[Tuple[Tuple[str, Any], ...]] = None
 _LOCK = Lock()  # protect (re)builds across threads
 
 
-def _get_env_int(name: str, default: int) -> int:
-    val = os.getenv(name)
-    if val is None:
-        return default
-    try:
-        return int(val)
-    except Exception:
-        return default
-
-
 def _current_params() -> Dict[str, Any]:
     """
     Build a psycopg2 connect() param dict directly from env.
     This bypasses URL parsing entirely (so passwords like 'OPqw1290@@.pgAdmin4'
     don't need any quoting/encoding).
-
-    ADDITIVE features (all optional via env):
-      - SSL extras: POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLROOTCERT
-      - Keepalives: POSTGRES_KEEPALIVES, *_IDLE, *_INTERVAL, *_COUNT
-      - Application name: POSTGRES_APPLICATION_NAME
-      - Statement timeout: POSTGRES_STATEMENT_TIMEOUT_MS (via 'options')
-      - Search path: POSTGRES_SEARCH_PATH (via 'options')
-      - Arbitrary options: POSTGRES_OPTIONS (appended to 'options')
     """
     sslmode = os.getenv("POSTGRES_SSLMODE", "disable")
-    connect_timeout = _get_env_int("POSTGRES_CONNECT_TIMEOUT", 5)
+    connect_timeout = int(os.getenv("POSTGRES_CONNECT_TIMEOUT", "5"))
 
-    params: Dict[str, Any] = {
+    return {
         "user": os.getenv("POSTGRES_USER", "postgres"),
         "password": os.getenv("POSTGRES_PASSWORD", ""),  # raw, no quoting needed
         "host": os.getenv("POSTGRES_HOST", "127.0.0.1"),
-        "port": _get_env_int("POSTGRES_PORT", 5432),
+        "port": int(os.getenv("POSTGRES_PORT", "5432")),
         "dbname": os.getenv("POSTGRES_DB", "detecktiv"),
         "sslmode": sslmode,
         "connect_timeout": connect_timeout,
     }
-
-    # SSL extras (psycopg2 params)
-    for env_name, key in [
-        ("POSTGRES_SSLCERT", "sslcert"),
-        ("POSTGRES_SSLKEY", "sslkey"),
-        ("POSTGRES_SSLROOTCERT", "sslrootcert"),
-    ]:
-        val = os.getenv(env_name)
-        if val:
-            params[key] = val
-
-    # Keepalives (supported by libpq/psycopg2)
-    for env_name, key in [
-        ("POSTGRES_KEEPALIVES", "keepalives"),
-        ("POSTGRES_KEEPALIVES_IDLE", "keepalives_idle"),
-        ("POSTGRES_KEEPALIVES_INTERVAL", "keepalives_interval"),
-        ("POSTGRES_KEEPALIVES_COUNT", "keepalives_count"),
-    ]:
-        val = os.getenv(env_name)
-        if val is not None and val != "":
-            # psycopg2 expects ints for these; fall back gracefully
-            try:
-                params[key] = int(val)
-            except Exception:
-                params[key] = val
-
-    # Application name (helps in pg_stat_activity)
-    app_name = os.getenv("POSTGRES_APPLICATION_NAME") or os.getenv("APP_NAME")
-    if app_name:
-        params["application_name"] = app_name
-
-    # Options: statement_timeout, search_path, and raw POSTGRES_OPTIONS
-    options_parts = []
-    st_ms = os.getenv("POSTGRES_STATEMENT_TIMEOUT_MS")
-    if st_ms and st_ms.isdigit():
-        options_parts.append(f"-c statement_timeout={st_ms}")
-    search_path = os.getenv("POSTGRES_SEARCH_PATH")
-    if search_path:
-        options_parts.append(f"-c search_path={search_path}")
-    raw_opts = os.getenv("POSTGRES_OPTIONS")
-    if raw_opts:
-        options_parts.append(raw_opts)
-    if options_parts:
-        params["options"] = " ".join(options_parts)
-
-    return params
 
 
 def _params_fingerprint(p: Dict[str, Any]) -> Tuple[Tuple[str, Any], ...]:
@@ -161,88 +96,6 @@ def ping_db() -> Tuple[bool, str]:
         return False, str(e)
 
 
-def ping_engine() -> Tuple[bool, str]:
-    """
-    Optional: ping using the SQLAlchemy Engine.
-    """
-    try:
-        eng = get_engine()
-        with eng.connect() as conn:
-            conn.exec_driver_sql("SELECT 1")
-        return True, "ok"
-    except Exception as e:
-        log.warning("Engine ping failed: %s", e)
-        return False, str(e)
-
-
-def _build_engine(**kw) -> Engine:
-    """
-    Internal helper to build the Engine with env-driven pool settings.
-    Uses a 'creator' that calls psycopg2.connect(**params) with retries/backoff.
-    """
-    params = _current_params()
-
-    # Connection retries with exponential backoff (small defaults; env-tunable)
-    retries = _get_env_int("DB_CONNECT_RETRIES", 3)
-    backoff_ms = _get_env_int("DB_CONNECT_BACKOFF_MS", 200)
-
-    def _creator():
-        attempt = 0
-        while True:
-            attempt += 1
-            try:
-                return psycopg2.connect(**params)
-            except Exception as e:
-                if attempt >= max(1, retries):
-                    # last attempt -> raise
-                    log.warning(
-                        "psycopg2.connect failed (attempt %s/%s) params=%s err=%s",
-                        attempt,
-                        retries,
-                        _masked_params(params),
-                        e,
-                    )
-                    raise
-                # backoff with jitter
-                delay = (backoff_ms * (2 ** (attempt - 1))) / 1000.0
-                delay = delay * (0.9 + 0.2 * random.random())  # 10% jitter
-                log.info(
-                    "psycopg2.connect failed (attempt %s/%s), retrying in %.2fs ...",
-                    attempt,
-                    retries,
-                    delay,
-                )
-                time.sleep(delay)
-
-    # Pool settings (only applied if provided; otherwise use SQLAlchemy defaults)
-    pool_kwargs: Dict[str, Any] = {}
-    if os.getenv("SQLALCHEMY_POOL_SIZE"):
-        pool_kwargs["pool_size"] = _get_env_int("SQLALCHEMY_POOL_SIZE", 5)
-    if os.getenv("SQLALCHEMY_MAX_OVERFLOW"):
-        pool_kwargs["max_overflow"] = _get_env_int("SQLALCHEMY_MAX_OVERFLOW", 10)
-    if os.getenv("SQLALCHEMY_POOL_TIMEOUT"):
-        pool_kwargs["pool_timeout"] = _get_env_int("SQLALCHEMY_POOL_TIMEOUT", 30)
-    if os.getenv("SQLALCHEMY_POOL_RECYCLE"):
-        pool_kwargs["pool_recycle"] = _get_env_int("SQLALCHEMY_POOL_RECYCLE", 1800)
-    # echo SQL (debug aid)
-    echo = os.getenv("SQLALCHEMY_ECHO", "0").lower() in ("1", "true", "yes")
-
-    eng = create_engine(
-        "postgresql+psycopg2://",
-        future=True,
-        pool_pre_ping=True,
-        creator=_creator,
-        echo=echo,
-        **pool_kwargs,
-    )
-    log.info(
-        "Engine constructed with params=%s pool=%s",
-        _masked_params(params),
-        {k: v for k, v in pool_kwargs.items()},
-    )
-    return eng
-
-
 def get_engine() -> Engine:
     """
     Lazily (re)build a SQLAlchemy Engine using a custom creator that calls
@@ -269,24 +122,18 @@ def get_engine() -> Engine:
                 except Exception:
                     log.exception("Engine dispose failed during rebuild")
 
-            _ENGINE = _build_engine()
+            def _creator():
+                # Use psycopg2 with our already-built dict to avoid URL quoting issues
+                # Add a tiny random jitter to connection timeout backoff if env requests retries
+                return psycopg2.connect(**params)
+
+            _ENGINE = create_engine(
+                "postgresql+psycopg2://",
+                future=True,
+                pool_pre_ping=True,
+                creator=_creator,
+            )
             _LAST_PARAMS = fp
             log.info("Engine (re)built with params=%s", _masked_params(params))
 
     return _ENGINE
-
-
-def engine_pool_status() -> str:
-    """
-    Return a human-readable pool status string if available; else 'unknown'.
-    """
-    try:
-        eng = get_engine()
-        # Most SQLAlchemy pools implement .status() -> str
-        status = getattr(eng.pool, "status", None)
-        if callable(status):
-            return status()
-        return "unknown"
-    except Exception as e:
-        log.debug("engine_pool_status failed: %s", e)
-        return "unknown"

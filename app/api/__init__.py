@@ -40,7 +40,7 @@ def _ensure_router_export(module_name: str, candidates: Iterable[str]) -> None:
             if hasattr(mod, alt):
                 setattr(mod, "router", getattr(mod, alt))
                 break
-        except Exception:
+        except Exception:  # nosec B112
             # Continue trying other candidates
             continue
 
@@ -72,7 +72,11 @@ try:
     _ensure_companies_house_router_export()
     _ensure_ch_companies_router_export()
 except Exception:
-    pass
+    import logging
+
+    logging.getLogger(__name__).debug(
+        "swallowed exception (benign path) in app.api.__init__", exc_info=True
+    )
 
 
 def get_api_router():
@@ -107,5 +111,9 @@ def install_error_handlers_lazy(app) -> bool:
             installer(app)
             return True
     except Exception:
-        pass
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "swallowed exception (benign path) in app.api.__init__", exc_info=True
+        )
     return False

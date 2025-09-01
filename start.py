@@ -5,7 +5,6 @@ Performs diagnostics and starts the application with proper error handling
 """
 import os
 import sys
-import time
 import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
@@ -25,10 +24,10 @@ def load_environment():
         load_dotenv(env_file)
         print(f"✅ Loaded environment from {env_file}")
     else:
-        print(f"⚠️  No .env file found. Using environment variables.")
+        print("⚠️  No .env file found. Using environment variables.")
 
     # Show key configuration (without secrets)
-    print(f"📋 Configuration:")
+    print("📋 Configuration:")
     print(f"   POSTGRES_HOST: {os.getenv('POSTGRES_HOST', 'localhost')}")
     print(f"   POSTGRES_PORT: {os.getenv('POSTGRES_PORT', '5432')}")
     print(f"   POSTGRES_DB:   {os.getenv('POSTGRES_DB', 'detecktiv')}")
@@ -106,7 +105,9 @@ def check_database_connection():
         print("   1. Make sure PostgreSQL is running")
         print("   2. Check your .env file has correct database settings")
         print("   3. If using Docker: run 'docker compose up -d postgres'")
-        print("   4. Test connection with: psql -h localhost -p 5432 -U postgres -d detecktiv")
+        print(
+            "   4. Test connection with: psql -h localhost -p 5432 -U postgres -d detecktiv"
+        )
         return False
 
     finally:
@@ -179,7 +180,7 @@ def run_migrations():
             print("✅ Migrations completed successfully")
             return True
         else:
-            print(f"❌ Migration failed:")
+            print("❌ Migration failed:")
             print(f"   STDOUT: {result.stdout.strip()}")
             print(f"   STDERR: {result.stderr.strip()}")
             return False
@@ -214,6 +215,7 @@ def test_app_import_and_preflight():
 
     try:
         from app.main import app
+
         print("✅ Application import successful")
 
         # Preflight: confirm key modular routes are mounted
@@ -226,9 +228,13 @@ def test_app_import_and_preflight():
         if not auth_ok or not me_ok:
             print("⚠️  One or more modular routes are not mounted.")
             print("   Hints:")
-            print("   - Ensure app/api/router.py includes app.api.auth and app.api.users")
+            print(
+                "   - Ensure app/api/router.py includes app.api.auth and app.api.users"
+            )
             print("   - Ensure app/main.py includes the router and/or fallback block")
-            print("   - Set API_ROUTER_DEBUG=1 and API_STRICT_IMPORTS=1 in .env for detailed import errors")
+            print(
+                "   - Set API_ROUTER_DEBUG=1 and API_STRICT_IMPORTS=1 in .env for detailed import errors"
+            )
 
         return True
     except Exception as e:
@@ -252,6 +258,7 @@ def start_application(port=8000, reload=True):
 
     try:
         import uvicorn
+
         # Use string import to keep reload friendly
         uvicorn.run(
             "app.main:app",

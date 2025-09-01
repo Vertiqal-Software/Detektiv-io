@@ -24,6 +24,7 @@ from sqlalchemy.engine import URL
 # Core builders
 # ---------------------------
 
+
 def _get_env_pg() -> Tuple[str, str, str, str, str, str]:
     """
     Read Postgres env vars (with safe defaults suitable for dev).
@@ -125,6 +126,7 @@ def get_masked_database_url() -> str:
 # Helpers (optional)
 # ---------------------------
 
+
 def validate_url(url: Optional[str] = None) -> bool:
     """
     Light validation: try to round-trip through SQLAlchemy's URL.create.
@@ -159,8 +161,10 @@ def get_psycopg2_dsn() -> str:
 # CLI (debug aid)
 # ---------------------------
 
+
 def _main():
     import sys
+
     arg = sys.argv[1] if len(sys.argv) > 1 else ""
     if arg == "show":
         print(get_database_url())

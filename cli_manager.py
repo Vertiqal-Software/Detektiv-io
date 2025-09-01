@@ -20,21 +20,15 @@ import asyncio
 import csv
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
 
 import click
-from sqlalchemy.orm import Session
-
-# Add the app directory to Python path
-sys.path.insert(0, str(Path(__file__).parent))
 
 from app.core.config import settings
 from app.core.database import (
     get_db_session,
     check_database_connection,
-    startup_database,
 )
 from app.core.logging import setup_logging, get_logger
 from app.models.company import Company
@@ -67,9 +61,8 @@ def check_config():
 
     # Database configuration
     click.echo(f"Database URL: {settings.get_database_url(mask_password=True)}")
-    click.echo(
-        f"Environment: {settings.is_development() and 'Development' or 'Production'}"
-    )
+    env_label = "Development" if settings.is_development() else "Production"
+    click.echo(f"Environment: {env_label}")
     click.echo(f"Debug mode: {settings.debug}")
     click.echo(f"Log level: {settings.log_level}")
 
@@ -121,7 +114,6 @@ def db_init():
 
     # Check if alembic is available
     try:
-        import alembic
         from alembic import command
         from alembic.config import Config
     except ImportError:
@@ -237,9 +229,7 @@ def db_seed(reset):
                     existing = service.get_company_by_name(company_data.name)
                     if existing:
                         if not reset:
-                            click.echo(
-                                f"Skipping existing company: {company_data.name}"
-                            )
+                            click.echo(f"Skipping existing company: {company_data.name}")
                             continue
 
                     company = service.create_company(company_data)
@@ -300,13 +290,16 @@ def companies_house_sync(limit, force):
                                 continue
 
                         click.echo(
-                            f"Syncing: {company.name} ({company.companies_house_number})"
+                            f"Syncing: {company.name} "
+                            f"({company.companies_house_number})"
                         )
 
-                        success, message, updated_fields = (
-                            await ch_service.update_company_from_companies_house(
-                                service, company.id, force_update=force
-                            )
+                        (
+                            success,
+                            message,
+                            updated_fields,
+                        ) = await ch_service.update_company_from_companies_house(
+                            service, company.id, force_update=force
                         )
 
                         if success:
@@ -486,11 +479,15 @@ def import_companies(csv_file, dry_run):
 
         if dry_run:
             click.echo(
-                f"📊 DRY RUN SUMMARY: {imported_count} would be imported, {skipped_count} would be skipped, {error_count} errors"
+                "📊 DRY RUN SUMMARY: "
+                f"{imported_count} would be imported, "
+                f"{skipped_count} would be skipped, "
+                f"{error_count} errors"
             )
         else:
             click.echo(
-                f"✅ Import complete: {imported_count} imported, {skipped_count} skipped, {error_count} errors"
+                f"✅ Import complete: {imported_count} imported, "
+                f"{skipped_count} skipped, {error_count} errors"
             )
 
     except Exception as e:
@@ -509,7 +506,7 @@ def stats():
             # Basic counts
             total_companies = session.query(Company).count()
             prospects = (
-                session.query(Company).filter(Company.is_prospect == True).count()
+                session.query(Company).filter(Company.is_prospect.is_(True)).count()
             )
             companies_house_linked = (
                 session.query(Company)
@@ -561,7 +558,7 @@ def run_server():
 
     try:
         import uvicorn
-        from app.main_enhanced import app
+        from app.main_enhanced import app  # ensure this module exists in your project
 
         uvicorn.run(
             app,

@@ -51,10 +51,14 @@ class CompaniesHouseClient:
             now = time.monotonic()
             elapsed = now - self._ts
             if elapsed > 0:
-                self._tokens = min(self.capacity, self._tokens + elapsed * self.refill_per_second)
+                self._tokens = min(
+                    self.capacity, self._tokens + elapsed * self.refill_per_second
+                )
                 self._ts = now
 
-        async def consume(self, tokens: float = 1.0, *, block: bool = True, max_wait: float = 30.0) -> bool:
+        async def consume(
+            self, tokens: float = 1.0, *, block: bool = True, max_wait: float = 30.0
+        ) -> bool:
             """
             Consume tokens from the bucket. If block=True, wait up to max_wait seconds.
             Returns True on success, False if not enough tokens by the deadline.
@@ -67,7 +71,11 @@ class CompaniesHouseClient:
                         self._tokens -= tokens
                         return True
                     need = tokens - self._tokens
-                    wait = need / self.refill_per_second if self.refill_per_second > 0 else max_wait
+                    wait = (
+                        need / self.refill_per_second
+                        if self.refill_per_second > 0
+                        else max_wait
+                    )
                     wait = max(0.01, min(wait, max_wait))
                 if not block or time.monotonic() + wait > deadline:
                     return False
@@ -87,17 +95,32 @@ class CompaniesHouseClient:
         client: Optional[httpx.AsyncClient] = None,
     ) -> None:
         # API key (support both env names)
-        self.api_key = (api_key or os.getenv("COMPANIES_HOUSE_API_KEY") or os.getenv("CH_API_KEY") or "").strip()
-        self.base_url = (base_url or os.getenv("CH_BASE_URL") or DEFAULT_BASE).rstrip("/")
+        self.api_key = (
+            api_key
+            or os.getenv("COMPANIES_HOUSE_API_KEY")
+            or os.getenv("CH_API_KEY")
+            or ""
+        ).strip()
+        self.base_url = (base_url or os.getenv("CH_BASE_URL") or DEFAULT_BASE).rstrip(
+            "/"
+        )
         self.timeout = (
             httpx.Timeout(float(os.getenv("CH_TIMEOUT_SECONDS", "10.0")))
             if isinstance(timeout, (int, float))
             else timeout
         )
-        self.burst_capacity = int(os.getenv("CH_BURST_CAPACITY", str(burst_capacity or 60)))
-        self.refill_per_second = float(os.getenv("CH_REFILL_PER_SECOND", str(refill_per_second or (600.0 / 300.0))))
+        self.burst_capacity = int(
+            os.getenv("CH_BURST_CAPACITY", str(burst_capacity or 60))
+        )
+        self.refill_per_second = float(
+            os.getenv("CH_REFILL_PER_SECOND", str(refill_per_second or (600.0 / 300.0)))
+        )
         self.max_retries = int(os.getenv("CH_MAX_RETRIES", str(max_retries or 3)))
-        self.user_agent = (user_agent or os.getenv("CH_USER_AGENT") or "detecktiv.io/1.0 (+https://detecktiv.io)").strip()
+        self.user_agent = (
+            user_agent
+            or os.getenv("CH_USER_AGENT")
+            or "detecktiv.io/1.0 (+https://detecktiv.io)"
+        ).strip()
 
         # httpx client (pooled connections)
         self._client = client or httpx.AsyncClient(
@@ -110,7 +133,9 @@ class CompaniesHouseClient:
         )
 
         # process-wide limiter (per-instance here; lift to a shared static if you want global limits)
-        self._bucket = self._TokenBucket(capacity=self.burst_capacity, refill_per_second=self.refill_per_second)
+        self._bucket = self._TokenBucket(
+            capacity=self.burst_capacity, refill_per_second=self.refill_per_second
+        )
 
     # -------------------- Lifecycle --------------------
     async def aclose(self) -> None:
@@ -216,17 +241,27 @@ class CompaniesHouseClient:
             # 429: honor Retry-After or backoff
             if status == 429:
                 if attempt <= self.max_retries:
-                    delay = self._retry_after_delay(resp, self._compute_backoff(attempt))
+                    delay = self._retry_after_delay(
+                        resp, self._compute_backoff(attempt)
+                    )
                     await asyncio.sleep(delay)
                     continue
-                raise httpx.HTTPStatusError("Rate limited by Companies House", request=resp.request, response=resp)
+                raise httpx.HTTPStatusError(
+                    "Rate limited by Companies House",
+                    request=resp.request,
+                    response=resp,
+                )
 
             # 5xx: retry with backoff
             if 500 <= status < 600:
                 if attempt <= self.max_retries:
                     await asyncio.sleep(self._compute_backoff(attempt))
                     continue
-                raise httpx.HTTPStatusError(f"Companies House server error {status}", request=resp.request, response=resp)
+                raise httpx.HTTPStatusError(
+                    f"Companies House server error {status}",
+                    request=resp.request,
+                    response=resp,
+                )
 
             # Other non-2xx -> raise
             try:
@@ -261,18 +296,27 @@ class CompaniesHouseClient:
         company_number = (company_number or "").strip()
         if not company_number:
             raise ValueError("company_number is required")
-        return await self._get(f"/company/{company_number}/persons-with-significant-control")
+        return await self._get(
+            f"/company/{company_number}/persons-with-significant-control"
+        )
 
-    async def filing_history(self, company_number: str, items_per_page: int = 100) -> Dict[str, Any]:
+    async def filing_history(
+        self, company_number: str, items_per_page: int = 100
+    ) -> Dict[str, Any]:
         company_number = (company_number or "").strip()
         if not company_number:
             raise ValueError("company_number is required")
         if items_per_page < 1 or items_per_page > 200:
             raise ValueError("items_per_page must be between 1 and 200")
-        return await self._get(f"/company/{company_number}/filing-history", {"items_per_page": items_per_page})
+        return await self._get(
+            f"/company/{company_number}/filing-history",
+            {"items_per_page": items_per_page},
+        )
 
     # -------------------- Search endpoints --------------------
-    async def search_companies(self, query: str, *, items_per_page: int = 20, start_index: int = 0) -> Dict[str, Any]:
+    async def search_companies(
+        self, query: str, *, items_per_page: int = 20, start_index: int = 0
+    ) -> Dict[str, Any]:
         """
         GET /search/companies?q=...&items_per_page=...&start_index=...
         Returns the raw Companies House search JSON.
@@ -284,7 +328,10 @@ class CompaniesHouseClient:
             raise ValueError("items_per_page must be between 1 and 100")
         if start_index < 0:
             raise ValueError("start_index must be >= 0")
-        return await self._get("/search/companies", {"q": q, "items_per_page": items_per_page, "start_index": start_index})
+        return await self._get(
+            "/search/companies",
+            {"q": q, "items_per_page": items_per_page, "start_index": start_index},
+        )
 
     async def iter_search(
         self,
@@ -300,7 +347,9 @@ class CompaniesHouseClient:
         fetched = 0
         start = 0
         while True:
-            page = await self.search_companies(query, items_per_page=items_per_page, start_index=start)
+            page = await self.search_companies(
+                query, items_per_page=items_per_page, start_index=start
+            )
             items: Iterable[Dict[str, Any]] = page.get("items") or []
             count = 0
             for item in items:

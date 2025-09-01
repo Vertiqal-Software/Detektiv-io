@@ -19,13 +19,9 @@ logger = logging.getLogger(__name__)
 class CompanyNotFoundError(Exception):
     """Raised when a company is not found."""
 
-    pass
-
 
 class CompanyExistsError(Exception):
     """Raised when trying to create a company that already exists."""
-
-    pass
 
 
 class CompanyService:

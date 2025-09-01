@@ -1,7 +1,7 @@
 # app/api/errors.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 import logging
 import os
 
@@ -60,7 +60,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     - No-store to discourage caching of error responses (configurable)
     """
     cid = _cid(request)
-    payload = {"error": {"code": exc.status_code, "message": exc.detail, "correlation_id": cid}}
+    payload = {
+        "error": {"code": exc.status_code, "message": exc.detail, "correlation_id": cid}
+    }
 
     headers = {"x-request-id": cid}
     if _NO_STORE_ERRORS:
@@ -119,6 +121,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 # -------------------- NEW: generic 500 handler (non-breaking) --------------------
 
+
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """
     Catch-all for unexpected exceptions. Keeps response minimal and consistent.
@@ -139,7 +142,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
     body: Dict[str, Any] = {
-        "error": {"code": 500, "message": "Internal server error", "correlation_id": cid}
+        "error": {
+            "code": 500,
+            "message": "Internal server error",
+            "correlation_id": cid,
+        }
     }
     if _SHOW_500_EXCEPTION:
         body["error"]["exception"] = exc.__class__.__name__
@@ -153,6 +160,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # --- Installer -----------------------------------------------------------------
 
+
 def install_error_handlers(app: FastAPI) -> None:
     """
     Register these handlers with a FastAPI app:
@@ -163,6 +171,7 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)  # new
+
 
 __all__ = [
     "install_error_handlers",

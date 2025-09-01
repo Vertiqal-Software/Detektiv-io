@@ -1,9 +1,12 @@
 # scripts/dev_doctor.py
-import os, sys, traceback
+import os
+import sys
+import traceback
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic import command
 from sqlalchemy import create_engine, text
+
 
 def _db_url_from_env():
     url = os.getenv("DATABASE_URL")
@@ -11,10 +14,11 @@ def _db_url_from_env():
         return url
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
-    db   = os.getenv("POSTGRES_DB", "detecktiv")
+    db = os.getenv("POSTGRES_DB", "detecktiv")
     user = os.getenv("POSTGRES_USER", "postgres")
-    pwd  = os.getenv("POSTGRES_PASSWORD", "")
+    pwd = os.getenv("POSTGRES_PASSWORD", "")
     return f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}?sslmode=disable"
+
 
 def check_db():
     url = _db_url_from_env()
@@ -23,6 +27,7 @@ def check_db():
     with eng.connect() as c:
         v = c.execute(text("select 1")).scalar()
         print("[ok] DB connect test:", v == 1)
+
 
 def check_heads(cfg):
     script = ScriptDirectory.from_config(cfg)
@@ -34,6 +39,7 @@ def check_heads(cfg):
         print("[warn] multiple heads:", ", ".join(ids))
     return ids
 
+
 def try_upgrade(cfg, target="head"):
     try:
         command.upgrade(cfg, target)
@@ -43,6 +49,7 @@ def try_upgrade(cfg, target="head"):
         print(f"[err] alembic upgrade {target} failed: {e.__class__.__name__}: {e}")
         traceback.print_exc()
         return False
+
 
 def main():
     os.environ.setdefault("PYTHONUTF8", "1")
@@ -56,12 +63,15 @@ def main():
     heads = check_heads(cfg)
 
     if len(heads) > 1:
-        print("[hint] run:  python -m alembic merge -m \"merge heads\" " + " ".join(heads))
+        print(
+            '[hint] run:  python -m alembic merge -m "merge heads" ' + " ".join(heads)
+        )
         return 2
 
     print("[step] upgrade head")
     ok = try_upgrade(cfg, "head")
     return 0 if ok else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,25 +1,30 @@
 // frontend/src/pages/Users/UsersEdit.tsx
-// Start point: your current file, strengthened without removing features.  :contentReference[oaicite:0]{index=0}
+// Start point: your current file, strengthened without removing features.
 //
-// Improvements:
-// - Fix API import to use alias (@/api/client)
+// Improvements (additive & non-breaking):
+// - Fix API import to your client (`{ users as UsersApi }`), keep types
 // - Robust typing (ViewUser + UserUpdate), null-safety for dates/fields
-// - Keep existing fields (name, role, is_active) and add optional password change
-// - Map role → is_admin for backend while preserving your role UI
+// - Keep existing fields (name, role, is_active) and optional password change
+// - Map UI fields to backend: `name` -> `full_name`; role normalized
+// - Backend-safe role mapping: supports 'admin' | 'analyst' | 'member'
+//   (other UI roles are mapped to 'member' to avoid backend 422s)
+// - Avoid flipping superuser inadvertently: set `is_superuser: true` only when role === 'admin'
 // - Better error handling & disabled states during save
-// - Keep layout/sections you already had
+// - Keeps your layout/sections and navigation
 
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { UsersApi, type User as ApiUser, type UserUpdate } from '@/api/client'
+import { users as UsersApi, type User as ApiUser, type UserUpdate } from '@/api/client'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
 type ViewUser = ApiUser & {
-  role?: string
+  full_name?: string | null
+  role?: string | null
   created_at?: string
   updated_at?: string
   is_active?: boolean
+  is_superuser?: boolean
 }
 
 type FormData = {
@@ -39,7 +44,7 @@ export default function UsersEdit() {
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
-    role: 'user',
+    role: 'member',
     is_active: true,
     password: '',
     confirm_password: '',
@@ -58,20 +63,29 @@ export default function UsersEdit() {
     if (user) {
       setFormData((prev) => ({
         ...prev,
-        name: user.name || '',
-        // Prefer explicit admin → 'admin'; otherwise keep server-provided role or default 'user'
-        role: user.is_admin ? 'admin' : (user.role || 'user'),
+        name: (user.full_name || '').trim(),
+        // Prefer server role if valid; otherwise default to 'member'
+        role: (user.role && ['admin', 'analyst', 'member'].includes(user.role)) ? (user.role as string) : 'member',
         is_active: user.is_active !== false,
       }))
     }
   }, [user])
 
+  // Normalize role to values accepted by backend; map UI extras to 'member'
+  const normalizeRole = (r?: string): 'admin' | 'analyst' | 'member' => {
+    const v = String(r || '').toLowerCase()
+    return v === 'admin' || v === 'analyst' || v === 'member' ? (v as any) : 'member'
+  }
+
   // Prepare PATCH -> only the fields backend expects
   const toPatch = (data: FormData): UserUpdate => {
+    const normalized = normalizeRole(data.role)
     const patch: UserUpdate = {
-      name: data.name?.trim(),
+      full_name: data.name?.trim(),
       is_active: data.is_active,
-      is_admin: data.role === 'admin', // Map your UI 'role' to backend permission
+      role: normalized,
+      // IMPORTANT: set superuser only when admin; avoid forcibly flipping it off
+      ...(normalized === 'admin' ? { is_superuser: true } : {}),
     }
     if (data.password && data.password.trim().length > 0) {
       patch.password = data.password.trim()
@@ -90,7 +104,6 @@ export default function UsersEdit() {
       navigate(`/users/${updatedUser.id}`)
     },
     onError: (err: any) => {
-      // Try to surface server-provided detail/message when available
       const message =
         err?.details?.detail ||
         err?.details?.message ||
@@ -181,7 +194,7 @@ export default function UsersEdit() {
         <div>
           <h1 className="text-2xl font-semibold text-white">Edit User</h1>
           <p className="mt-1 text-sm text-trust-silver">
-            Update {(user.name && user.name.trim()) || user.email || `user #${user.id}`}'s account information
+            Update {(user.full_name && user.full_name.trim()) || user.email || `user #${user.id}`}'s account information
           </p>
         </div>
       </div>
@@ -222,7 +235,7 @@ export default function UsersEdit() {
             {errors.name && <p className="mt-1 text-sm text-critical-red">{errors.name}</p>}
           </div>
 
-          {/* Role field (maps to is_admin for backend) */}
+          {/* Role field (safe mapping to backend) */}
           <div>
             <label htmlFor="role" className="block text-sm font-medium text-white mb-2">
               Role
@@ -234,14 +247,16 @@ export default function UsersEdit() {
               className="input-field w-full"
               disabled={updateMutation.isPending}
             >
-              <option value="user">User</option>
+              {/* Keep UI-friendly roles; map unsupported to 'member' on submit */}
+              <option value="member">Member</option>
+              <option value="analyst">Analyst</option>
               <option value="admin">Admin</option>
-              {/* keep your domain roles for UI semantics */}
               <option value="sales_director">Sales Director</option>
               <option value="account_manager">Account Manager</option>
             </select>
             <p className="mt-1 text-sm text-trust-silver">
-              Choosing <strong>Admin</strong> grants administrator permissions. Other roles are treated as standard users.
+              Choosing <strong>Admin</strong> grants administrator permissions. Unsupported roles are treated as{' '}
+              <strong>Member</strong> on the server.
             </p>
           </div>
 

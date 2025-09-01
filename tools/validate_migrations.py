@@ -80,7 +80,11 @@ def _extract_rev_fields(py_file: Path) -> Optional[Mig]:
 
     for node in tree.body:
         # Handle "x: type = value" (AnnAssign)
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.value is not None
+        ):
             key = node.target.id
             val = _lit(node.value)
             if key == "revision":
@@ -180,7 +184,9 @@ def main() -> int:
         print("\n[FAIL] Multiple heads detected (unmerged branches):")
         for h in heads:
             print(f"  - {h}")
-        print("Fix: create a merge migration that sets down_revision to both branch heads.")
+        print(
+            "Fix: create a merge migration that sets down_revision to both branch heads."
+        )
         return 1
 
     print("[OK] Migrations look good.")

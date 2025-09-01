@@ -36,6 +36,7 @@ __all__ = [
 # - Does nothing harmful if models are already imported.
 # ---------------------------------------------------------------------------
 
+
 def import_all_models() -> None:
     """
     Import all Python modules in this package (except dunders and this file),
@@ -56,7 +57,7 @@ def import_all_models() -> None:
             continue
         try:
             importlib.import_module(f"{__name__}.{name}")
-        except Exception as e:  # keep non-fatal; diagnostics only
+        except Exception:  # keep non-fatal; diagnostics only
             # You can enable logging here if desired:
             # import logging; logging.getLogger(__name__).debug("Skip %s: %s", name, e)
             pass
@@ -64,6 +65,7 @@ def import_all_models() -> None:
     # Optionally extend __all__ with any declarative models discovered dynamically.
     try:
         from sqlalchemy.orm import DeclarativeMeta  # type: ignore
+
         for k, v in list(globals().items()):
             if isinstance(v, DeclarativeMeta) and k not in __all__:
                 __all__.append(k)

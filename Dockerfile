@@ -1,58 +1,77 @@
-# Base image
-FROM python:3.13-slim
+# docker-compose.yml
+version: "3.9"
 
-# Environment
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/app
+services:
+  db:
+    image: postgres:15
+    container_name: detecktiv_db
+    environment:
+      POSTGRES_DB: detecktiv
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
-# System deps:
-# - bash: entrypoint uses bash features
-# - curl, postgresql-client: used by entrypoint/health checks
-# - build-essential, libpq-dev: safe for psycopg2/psycopg builds
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      bash \
-      curl \
-      postgresql-client \
-      build-essential \
-      libpq-dev \
- && rm -rf /var/lib/apt/lists/*
+  # Optional dev SMTP server (Mailpit). Web UI at http://localhost:8025
+  mail:
+    image: axllent/mailpit:latest
+    container_name: detecktiv_mail
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    restart: unless-stopped
 
-# Unprivileged user
-RUN useradd -ms /bin/bash appuser
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: detecktiv_api
+    env_file:
+      - .env
+    environment:
+      # DB — set DATABASE_URL explicitly so SQLAlchemy uses the right driver & schema
+      DATABASE_URL: "postgresql+psycopg2://postgres:postgres@db:5432/detecktiv?sslmode=disable&options=-csearch_path%3Dapp"
+      POSTGRES_SCHEMA: "app"
 
-WORKDIR /app
+      # JWT / Auth defaults (override in .env for real secrets)
+      SECRET_KEY: "change-me"
+      JWT_ALG: "HS256"
+      ACCESS_TOKEN_EXPIRES_SECONDS: "900"
+      REFRESH_TOKEN_EXPIRES_SECONDS: "1209600"
 
-# Install Python deps with cache-friendly layering
-# (If you only have requirements.txt, the wildcard still works.)
-COPY requirements*.txt ./
-RUN python -m pip install --upgrade pip \
- && if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+      # CORS (adjust to your frontend origin)
+      CORS_ORIGINS: "http://localhost:5173"
 
-# Copy the rest of the app
-COPY . /app
+      # Optional cookies
+      AUTH_COOKIES: "0"
 
-# Always use the repo's docker/entrypoint.sh as the runtime entrypoint
-# - Force copy (overwrites any existing /app/entrypoint.sh)
-# - Strip CRLF (Windows) to LF
-# - Make executable
-RUN cp -f /app/docker/entrypoint.sh /app/entrypoint.sh \
- && sed -i 's/\r$//' /app/entrypoint.sh \
- && chmod +x /app/entrypoint.sh \
- && chown -R appuser:appuser /app
+      # Optional rate limits
+      RATE_LIMIT_ENABLED: "1"
+      RATE_LIMIT_AUTH_LOGIN: "10/minute"
+      RATE_LIMIT_AUTH_REFRESH: "60/minute"
 
-# Let Alembic tools/scripts work out of the box (can be overridden)
-ENV ALEMBIC_CONFIG=/app/alembic.ini
+      # Mail (points to the dev SMTP container above)
+      SMTP_HOST: "mail"
+      SMTP_PORT: "1025"
+      MAIL_FROM: "no-reply@local.test"
+      MAIL_FROM_NAME: "detecktiv.io"
 
-# Expose API port
-EXPOSE 8000
+      # OpenAPI servers (so the docs try the right host)
+      OPENAPI_SERVERS: "http://localhost:8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
-# Run as non-root
-USER appuser
-
-# Normal startup: entrypoint does DB wait/migrations gating, then execs uvicorn
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+volumes:
+  pgdata:

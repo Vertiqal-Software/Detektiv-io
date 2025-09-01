@@ -28,6 +28,7 @@ except Exception:  # pragma: no cover
     def _env_api_key() -> Optional[str]:  # type: ignore
         return os.getenv("CH_API_KEY") or os.getenv("COMPANIES_HOUSE_API_KEY")
 
+
 __all__ = [
     "router",
     # Back-compat re-exports:
@@ -47,8 +48,10 @@ router = APIRouter(
 # Models / helpers
 # -------------------------------------------------------------------------
 
+
 class ErrorResponse(BaseModel):
     """Minimal error shape for Swagger docs."""
+
     detail: str = Field(..., example="Upstream Companies House error")
 
 
@@ -105,14 +108,21 @@ def _as_http_error(exc: Exception) -> HTTPException:
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def search_companies(
     request: Request,
     q: str = Query(..., description="Search query"),
-    items_per_page: int = Query(20, ge=1, le=100, description="Companies House page size"),
-    start_index: int = Query(0, ge=0, description="Offset into Companies House results"),
+    items_per_page: int = Query(
+        20, ge=1, le=100, description="Companies House page size"
+    ),
+    start_index: int = Query(
+        0, ge=0, description="Offset into Companies House results"
+    ),
     advanced_first: bool = Query(
         True,
         description="If true, call /advanced-search/companies first then fallback to /search/companies",
@@ -155,7 +165,10 @@ def search_companies(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_profile(
@@ -180,7 +193,10 @@ def company_profile(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_full(
@@ -225,7 +241,10 @@ def company_full(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_officers(
@@ -255,7 +274,10 @@ def company_officers(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_filing_history(
@@ -285,7 +307,10 @@ def company_filing_history(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_psc_individual(
@@ -315,7 +340,10 @@ def company_psc_individual(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_psc_corporate(
@@ -345,7 +373,10 @@ def company_psc_corporate(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_psc_legal_person(
@@ -375,7 +406,10 @@ def company_psc_legal_person(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_psc_statements(
@@ -405,7 +439,10 @@ def company_psc_statements(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_charges(
@@ -435,7 +472,10 @@ def company_charges(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_insolvency(
@@ -457,7 +497,10 @@ def company_insolvency(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_exemptions(
@@ -479,7 +522,10 @@ def company_exemptions(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_registers(
@@ -501,7 +547,10 @@ def company_registers(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_uk_establishments(
@@ -531,7 +580,10 @@ def company_uk_establishments(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def officer_appointments(

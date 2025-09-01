@@ -14,7 +14,7 @@ Nothing here should raise at import time; all operations are best-effort.
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Iterable, Optional
+from typing import Iterable
 
 __all__ = [
     "get_api_router",
@@ -88,6 +88,7 @@ def get_api_router():
     except Exception:
         # Return a minimal empty router to avoid breaking callers
         from fastapi import APIRouter  # lightweight
+
         return APIRouter()
 
 

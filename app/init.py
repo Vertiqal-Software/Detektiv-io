@@ -8,7 +8,6 @@ Useful metadata and tiny helpers only.
 from __future__ import annotations
 
 import os as _os
-from typing import Optional as _Optional
 
 __all__ = [
     "__version__",

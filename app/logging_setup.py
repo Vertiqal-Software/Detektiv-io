@@ -31,7 +31,7 @@ def _scrub_message(msg: str) -> str:
 
         # key=value and key: value variants for common sensitive keys
         msg = re.sub(
-            r'(?i)\b(password|token|secret|api[_-]?key|authorization)\s*[:=]\s*([^\s,;]+)',
+            r"(?i)\b(password|token|secret|api[_-]?key|authorization)\s*[:=]\s*([^\s,;]+)",
             r"\1=***",
             msg,
         )
@@ -39,7 +39,7 @@ def _scrub_message(msg: str) -> str:
         # JSON-ish "key": "value" for those sensitive keys
         msg = re.sub(
             r'(?i)("(?:password|token|secret|api[_-]?key|authorization)"\s*:\s*")([^"]+)(")',
-            r'\1***\3',
+            r"\1***\3",
             msg,
         )
         return msg
@@ -99,7 +99,9 @@ class JSONFormatter(logging.Formatter):
 
         if os.getenv("LOG_TS_ISO", "0") == "1":
             # Add ISO timestamp alongside epoch ms
-            base["ts_iso"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_ms / 1000))
+            base["ts_iso"] = time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_ms / 1000)
+            )
 
         return json.dumps(base, separators=(",", ":"))
 
@@ -109,6 +111,7 @@ class PrettyFormatter(logging.Formatter):
     Human-friendly console formatter for local dev.
     Enabled with LOG_FORMAT=pretty (or LOG_FORMAT=plain as an alias).
     """
+
     def format(self, record: logging.LogRecord) -> str:
         ts = time.strftime("%H:%M:%S", time.localtime())
         rid = getattr(record, "request_id", "-")
@@ -121,6 +124,7 @@ class ContextInjectFilter(logging.Filter):
     Injects request_id from contextvars into the record if not already present.
     Ensures any logger under a request emits a consistent request_id.
     """
+
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
             rid = _request_id_ctx.get()

@@ -52,7 +52,13 @@ if config.config_file_name is not None:
 # Clean conflicting PG* environment variables (from tools like pgAdmin)
 # ---------------------------------------------------------------------
 for k in list(os.environ.keys()):
-    if k.startswith("PG") and k not in {"PGPASSWORD", "PGUSER", "PGHOST", "PGPORT", "PGDATABASE"}:
+    if k.startswith("PG") and k not in {
+        "PGPASSWORD",
+        "PGUSER",
+        "PGHOST",
+        "PGPORT",
+        "PGDATABASE",
+    }:
         os.environ.pop(k, None)
 
 # ---------------------------------------------------------------------
@@ -63,7 +69,9 @@ try:
     # Original attempt: expects app/models/__init__.py to import all models
     from app.models import Base  # imports all models via package __init__
 except Exception as e:  # pragma: no cover
-    print(f"[alembic/env] Warning: cannot import app.models.Base ({e}); autogenerate may be limited.")
+    print(
+        f"[alembic/env] Warning: cannot import app.models.Base ({e}); autogenerate may be limited."
+    )
     Base = None
 
 target_metadata = getattr(Base, "metadata", None)
@@ -72,6 +80,7 @@ target_metadata = getattr(Base, "metadata", None)
 if target_metadata is None:
     try:
         from importlib import import_module
+
         models_dir = PROJECT_ROOT / "app" / "models"
         if models_dir.exists():
             for py in models_dir.glob("*.py"):
@@ -81,14 +90,19 @@ if target_metadata is None:
                 try:
                     import_module(f"app.models.{name}")
                 except Exception as sub_exc:
-                    print(f"[alembic/env] Note: skipped import app.models.{name}: {sub_exc}")
+                    print(
+                        f"[alembic/env] Note: skipped import app.models.{name}: {sub_exc}"
+                    )
         # Re-evaluate Base after dynamic imports
         try:
             from app.models import Base as _Base
+
             Base = _Base
             target_metadata = getattr(Base, "metadata", None)
             if target_metadata is not None:
-                print("[alembic/env] Target metadata reloaded from app.models after dynamic imports.")
+                print(
+                    "[alembic/env] Target metadata reloaded from app.models after dynamic imports."
+                )
         except Exception as reimport_exc:
             print(f"[alembic/env] Fallback re-import of Base failed: {reimport_exc}")
     except Exception as dyn_exc:
@@ -157,6 +171,7 @@ def masked_url(url: str) -> str:
 print(f"[alembic/env] Using database URL: {masked_url(DATABASE_URL)}")
 print(f"[alembic/env] Target schema: {SCHEMA}")
 
+
 # ---------------------------------------------------------------------
 # Include filter: keep scope to our target schema for diffs/autogenerate
 # ---------------------------------------------------------------------
@@ -199,9 +214,9 @@ def run_migrations_offline() -> None:
         include_schemas=True,
         compare_type=True,
         compare_server_default=True,
-        default_schema_name=SCHEMA,      # target schema for diffs
+        default_schema_name=SCHEMA,  # target schema for diffs
         version_table="alembic_version",
-        version_table_schema=SCHEMA,     # version table lives in target schema
+        version_table_schema=SCHEMA,  # version table lives in target schema
         process_revision_directives=process_revision_directives,
     )
 
@@ -235,7 +250,9 @@ def run_migrations_online() -> None:
             print(f"[alembic/env] search_path: {spath}")
         except Exception as exc:
             print(f"[alembic/env] Database connection failed: {exc}")
-            print("[alembic/env] Verify DB credentials/host and that PostgreSQL is running.")
+            print(
+                "[alembic/env] Verify DB credentials/host and that PostgreSQL is running."
+            )
             sys.exit(1)
 
         # --- Additive: relocate version table inside a transaction for safety ---
@@ -260,11 +277,17 @@ def run_migrations_online() -> None:
                 ).scalar()
 
                 if has_public and not has_target:
-                    print(f"[alembic/env] Relocating public.alembic_version -> {SCHEMA}.alembic_version ...")
-                    connection.execute(
-                        text(f'create table if not exists "{SCHEMA}"."alembic_version" (version_num varchar(32) not null)')
+                    print(
+                        f"[alembic/env] Relocating public.alembic_version -> {SCHEMA}.alembic_version ..."
                     )
-                    connection.execute(text(f'delete from "{SCHEMA}"."alembic_version"'))
+                    connection.execute(
+                        text(
+                            f'create table if not exists "{SCHEMA}"."alembic_version" (version_num varchar(32) not null)'
+                        )
+                    )
+                    connection.execute(
+                        text(f'delete from "{SCHEMA}"."alembic_version"')
+                    )
                     connection.execute(
                         text(
                             f'insert into "{SCHEMA}"."alembic_version" (version_num) '
@@ -274,7 +297,9 @@ def run_migrations_online() -> None:
                     connection.execute(text("drop table public.alembic_version"))
                     print("[alembic/env] Relocation complete.")
         except Exception as exc:
-            print(f"[alembic/env] Warning: could not verify/relocate alembic_version table ({exc}). Continuing.")
+            print(
+                f"[alembic/env] Warning: could not verify/relocate alembic_version table ({exc}). Continuing."
+            )
 
         # Configure Alembic and run migrations
         context.configure(
@@ -310,7 +335,9 @@ def validate_environment():
         required_vars = ["POSTGRES_USER", "POSTGRES_DB"]
         missing = [v for v in required_vars if not os.getenv(v)]
         if missing:
-            print(f"[alembic/env] Missing required environment variables: {', '.join(missing)}")
+            print(
+                f"[alembic/env] Missing required environment variables: {', '.join(missing)}"
+            )
             print(
                 "[alembic/env] Either set a DATABASE URL via app.core.config/app.config settings.get_database_url() "
                 "or provide POSTGRES_* variables."
@@ -325,7 +352,9 @@ def validate_environment():
             try:
                 import psycopg  # type: ignore  # noqa: F401
             except Exception:
-                print("[alembic/env] No PostgreSQL driver available. Install with one of:")
+                print(
+                    "[alembic/env] No PostgreSQL driver available. Install with one of:"
+                )
                 print("  - pip install psycopg2-binary   (preferred for this project)")
                 print("  - pip install psycopg[binary]   (psycopg3 alternative)")
                 sys.exit(1)

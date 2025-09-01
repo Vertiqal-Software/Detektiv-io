@@ -1,16 +1,16 @@
-# app/api/snapshot.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-from fastapi import APIRouter, HTTPException, Query
-
 import asyncio
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse, urlunparse
+
 import httpx
+from fastapi import APIRouter, HTTPException, Path, Query
+from pydantic import BaseModel, Field
 
 # Ensure module import works during app startup (keeps existing behavior)
 from . import health  # noqa: F401  (import used to guarantee module load order)
 
-# --- ADDITIVE: Try modern import paths first; fall back to legacy hint ---
 # Prefer an async client if your repo provides one, else adapt the sync client.
 AsyncClientType = Any
 
@@ -19,29 +19,35 @@ _async_client_ctor: Optional[Any] = None
 try:  # pragma: no cover
     # hypothetical async client (only if your repo has it)
     from app.services.ch_async_client import CompaniesHouseAsyncClient as _AsyncCtor  # type: ignore
+
     _async_client_ctor = _AsyncCtor  # type: ignore[assignment]
-except Exception:
+except (
+    Exception
+):  # nosec B110  # nosec B110 - optional component; safe to continue without it
     _async_client_ctor = None
 
 # 2) Fallback to the canonical sync client, adapted for async usage
 _sync_client_ctor: Optional[Any] = None
 try:
     from app.services.companies_house import CompaniesHouseClient as _SyncCtor  # type: ignore
+
     _sync_client_ctor = _SyncCtor
-except Exception:
+except (
+    Exception
+):  # nosec B110  # nosec B110 - optional import; safe fallback handled below
     _sync_client_ctor = None
 
 # 3) Legacy path mentioned in comment (keep as very last resort)
 if _async_client_ctor is None and _sync_client_ctor is None:
     try:  # pragma: no cover
         from .services.ch_client import CompaniesHouseClient as _LegacySyncCtor  # type: ignore
+
         _sync_client_ctor = _LegacySyncCtor
-    except Exception:
+    except (
+        Exception
+    ) as _e:  # nosec B110 - final optional fallback; endpoint still works without CH data
         pass
 
-from pydantic import BaseModel, Field  # noqa: F401
-from fastapi import Path
-from urllib.parse import urlparse, urlunparse
 
 router = APIRouter(prefix="/snapshot", tags=["snapshot"])
 
@@ -85,6 +91,7 @@ except Exception:  # nosec B110
 # Async client resolution layer
 # -----------------------------
 
+
 def _build_async_client() -> AsyncClientType:
     """
     Return an async-capable client instance. Prefer a real async client if
@@ -109,19 +116,27 @@ def _build_async_client() -> AsyncClientType:
 
         async def company_profile(self, company_number: str) -> Dict[str, Any]:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, self._inner.get_company_profile, company_number)
+            return await loop.run_in_executor(
+                None, self._inner.get_company_profile, company_number
+            )
 
         async def officers(self, company_number: str) -> Dict[str, Any]:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, self._inner.get_company_officers, company_number)
+            return await loop.run_in_executor(
+                None, self._inner.get_company_officers, company_number
+            )
 
         async def psc(self, company_number: str) -> Dict[str, Any]:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, self._inner.get_company_psc, company_number)
+            return await loop.run_in_executor(
+                None, self._inner.get_company_psc, company_number
+            )
 
         async def filing_history(self, company_number: str) -> Dict[str, Any]:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, self._inner.get_company_filing_history, company_number)
+            return await loop.run_in_executor(
+                None, self._inner.get_company_filing_history, company_number
+            )
 
         async def aclose(self) -> None:
             # No-op for sync client
@@ -133,6 +148,7 @@ def _build_async_client() -> AsyncClientType:
 # -----------------------------
 # URL + robots helpers
 # -----------------------------
+
 
 def _normalize_website(url: str) -> Optional[str]:
     """
@@ -169,19 +185,20 @@ async def _safe_head(url: str) -> str | None:
         robots = urlunparse((p.scheme, p.netloc, "/robots.txt", "", "", ""))
 
         headers = {"User-Agent": "detecktiv.io-snapshot/1.0"}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(5.0), headers=headers
+        ) as client:
             try:
                 rbt = await client.get(robots)
                 if rbt.status_code == 200 and b"Disallow: /" in rbt.content:
                     return None
-            except Exception:  # nosec B110
-                # robots check is best-effort; ignore failures
+            except Exception:  # nosec B110 - robots check is best-effort
                 pass
 
             r = await client.head(normalized, follow_redirects=True)
             if r.status_code < 400:
                 return r.headers.get("Last-Modified")
-    except Exception:  # nosec B110
+    except Exception:  # nosec B110 - external calls are best-effort
         return None
     return None
 
@@ -189,6 +206,7 @@ async def _safe_head(url: str) -> str | None:
 # -----------------------------
 # Route
 # -----------------------------
+
 
 @router.get(
     "/{company_number}",
@@ -241,7 +259,7 @@ async def snapshot(
             # async clients usually provide .aclose(); adapter makes this a no-op for sync
             try:
                 await ch.aclose()
-            except Exception:
+            except Exception:  # nosec B110  # nosec B110 - best-effort cleanup
                 pass
 
     last_mod = None
@@ -254,3 +272,4 @@ async def snapshot(
         website_last_modified=last_mod,
         **results,
     )
+

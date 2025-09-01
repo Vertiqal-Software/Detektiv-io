@@ -1,7 +1,7 @@
 # app/api/health.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from fastapi import APIRouter, Request, Response
 import os
 import socket
@@ -13,11 +13,13 @@ from urllib.parse import urlparse, parse_qs
 try:
     import psycopg2  # type: ignore
     from psycopg2 import OperationalError  # type: ignore
+
     _PG_DRIVER = "psycopg2"
 except Exception:  # pragma: no cover
     try:
         import psycopg  # type: ignore
         from psycopg import OperationalError  # type: ignore
+
         _PG_DRIVER = "psycopg"
     except Exception:  # pragma: no cover
         psycopg2 = None  # type: ignore
@@ -69,9 +71,12 @@ def _db_params_from_env() -> Dict[str, Any]:
         scheme = (p.scheme or "").lower()
         if scheme.startswith("postgres"):
             q = parse_qs(p.query or "")
-            sslmode = (q.get("sslmode", [os.getenv("POSTGRES_SSLMODE", "disable")])[0]) or "disable"
+            sslmode = (
+                q.get("sslmode", [os.getenv("POSTGRES_SSLMODE", "disable")])[0]
+            ) or "disable"
             return {
-                "dbname": (p.path or "/").lstrip("/") or os.getenv("POSTGRES_DB", "detecktiv"),
+                "dbname": (p.path or "/").lstrip("/")
+                or os.getenv("POSTGRES_DB", "detecktiv"),
                 "user": p.username or os.getenv("POSTGRES_USER", "postgres"),
                 "password": p.password or os.getenv("POSTGRES_PASSWORD", ""),
                 "host": p.hostname or os.getenv("POSTGRES_HOST", "127.0.0.1"),
@@ -152,12 +157,22 @@ def readiness(request: Request, response: Response) -> Dict[str, Any]:
         "db_url_source": str(params.get("_source", "")),
         "db_scheme": str(params.get("_scheme", "")),
         "pg_driver": _PG_DRIVER,
-        "has_db_password": bool(os.getenv("POSTGRES_PASSWORD") or urlparse(os.getenv("DATABASE_URL", "")).password),
-        "has_ch_api_key": bool(os.getenv("CH_API_KEY") or os.getenv("COMPANIES_HOUSE_API_KEY")),
+        "has_db_password": bool(
+            os.getenv("POSTGRES_PASSWORD")
+            or urlparse(os.getenv("DATABASE_URL", "")).password
+        ),
+        "has_ch_api_key": bool(
+            os.getenv("CH_API_KEY") or os.getenv("COMPANIES_HOUSE_API_KEY")
+        ),
         "hostname": socket.gethostname(),
     }
 
-    skip_db = (os.getenv("HEALTH_SKIP_DB_CHECK") or "").strip().lower() in {"1", "true", "yes", "y"}
+    skip_db = (os.getenv("HEALTH_SKIP_DB_CHECK") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
 
     db_ok = True if skip_db else _db_quick_ping(params)
     if not db_ok:

@@ -1,16 +1,13 @@
 // frontend/src/pages/Me/Profile.tsx
 // Starting from your file; fixes + adds without removing features:
-// - Fix imports to alias paths and AuthApi.me()
-// - Safer typing/null checks for dates/role/is_active
-// - Keep inline name edit UX; robust validation + disabled states
-// - Add optional "Change Password" editor (inline in Quick Actions)
-// - Update auth store after successful changes
+// - Align import path for auth store to your actual location (`src/pages/stores/authStore.ts`)
+// - Keep all improvements: inline name edit, password change, safe typing/null checks
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AuthApi, UsersApi, type UserUpdate } from '@/api/client'
-import { useAuthStore } from '@/stores/authStore'
-import { 
+import { auth as AuthApi, users as UsersApi, type UserUpdate } from '@/api/client'
+import { useAuthStore } from '@/pages/stores/authStore' // <-- aligned path to your stores folder
+import {
   UserCircleIcon,
   EnvelopeIcon,
   CalendarDaysIcon,
@@ -24,10 +21,10 @@ import {
 export default function Profile() {
   const { user: currentUser, setUser } = useAuthStore()
   const queryClient = useQueryClient()
-  
+
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
-    name: currentUser?.name || '',
+    full_name: currentUser?.full_name || '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -76,26 +73,26 @@ export default function Profile() {
   })
 
   const handleEdit = () => {
-    setFormData({ name: user?.name || '' })
+    setFormData({ full_name: user?.full_name || '' })
     setIsEditing(true)
     setErrors({})
   }
 
   const handleCancel = () => {
-    setFormData({ name: user?.name || '' })
+    setFormData({ full_name: user?.full_name || '' })
     setIsEditing(false)
     setErrors({})
   }
 
   const handleSave = () => {
     setErrors({})
-    
-    if (!formData.name.trim()) {
-      setErrors({ name: 'Name is required' })
+
+    if (!formData.full_name.trim()) {
+      setErrors({ full_name: 'Name is required' })
       return
     }
 
-    updateMutation.mutate({ name: formData.name.trim() })
+    updateMutation.mutate({ full_name: formData.full_name.trim() })
   }
 
   const onChangePassword = () => {
@@ -141,7 +138,7 @@ export default function Profile() {
   }
 
   // Safe computed values
-  const safeName = user.name || '—'
+  const safeName = user.full_name || '—'
   const initials = (safeName?.[0] || user.email?.[0] || '?').toUpperCase()
   const isActive = user.is_active ?? true
   const roleLabel = user.role
@@ -179,14 +176,14 @@ export default function Profile() {
                 <div className="space-y-2">
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                     className="bg-white/20 backdrop-blur-glass border border-white/30 text-white rounded-medium px-3 py-2 w-full max-w-xs focus:ring-2 focus:ring-white/50 focus:border-white/50"
                     placeholder="Your full name"
                     disabled={updateMutation.isPending}
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-200">{errors.name}</p>
+                  {errors.full_name && (
+                    <p className="text-sm text-red-200">{errors.full_name}</p>
                   )}
                   <div className="flex items-center space-x-2">
                     <button
@@ -228,8 +225,8 @@ export default function Profile() {
                   <p className="text-purple-100 mt-1">{user.email}</p>
                   <div className="flex items-center space-x-4 mt-3">
                     <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${
-                      isActive 
-                        ? 'bg-success-green/20 text-success-green' 
+                      isActive
+                        ? 'bg-success-green/20 text-success-green'
                         : 'bg-gray-600/20 text-gray-300'
                     }`}>
                       {isActive ? 'Active' : 'Inactive'}
@@ -251,7 +248,7 @@ export default function Profile() {
             <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-3">
               Account Information
             </h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
                 <EnvelopeIcon className="h-5 w-5 text-detecktiv-purple mt-1" />
@@ -263,7 +260,7 @@ export default function Profile() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-3">
                 <UserCircleIcon className="h-5 w-5 text-detecktiv-purple mt-1" />
                 <div>
@@ -274,7 +271,7 @@ export default function Profile() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-3">
                 <ShieldCheckIcon className="h-5 w-5 text-detecktiv-purple mt-1" />
                 <div>
@@ -295,7 +292,7 @@ export default function Profile() {
             <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-3">
               Activity & History
             </h3>
-            
+
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
                 <CalendarDaysIcon className="h-5 w-5 text-detecktiv-purple mt-1" />
@@ -306,7 +303,7 @@ export default function Profile() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start space-x-3">
                 <CalendarDaysIcon className="h-5 w-5 text-detecktiv-purple mt-1" />
                 <div>
@@ -478,10 +475,10 @@ export default function Profile() {
             </button>
           </div>
         </div>
-        
+
         <div className="mt-6 pt-4 border-t border-gray-700">
           <p className="text-xs text-trust-silver">
-            <strong>Note:</strong> Some account changes require administrator approval. 
+            <strong>Note:</strong> Some account changes require administrator approval.
             Contact your system administrator for role changes or account deactivation.
           </p>
         </div>

@@ -37,6 +37,7 @@ def get_settings_lazy() -> Optional[Any]:
     """
     try:
         from importlib import import_module
+
         core = import_module("app.core.config")
         if hasattr(core, "get_settings"):
             return core.get_settings()  # type: ignore[attr-defined]
@@ -55,6 +56,7 @@ def get_masked_database_url_lazy() -> str:
     """
     try:
         from app.config import get_masked_database_url  # lightweight shim
+
         return get_masked_database_url()  # type: ignore[no-any-return]
     except Exception:
         return "postgresql+psycopg2://*** (unresolved)"
@@ -66,10 +68,7 @@ def env_name(default: str = "development") -> str:
     Orders of precedence are common env var names.
     """
     return (
-        os.getenv("ENVIRONMENT")
-        or os.getenv("APP_ENV")
-        or os.getenv("ENV")
-        or default
+        os.getenv("ENVIRONMENT") or os.getenv("APP_ENV") or os.getenv("ENV") or default
     )
 
 
@@ -92,6 +91,7 @@ def ensure_logging() -> bool:
     """
     try:
         from app.logging_setup import setup_logging
+
         setup_logging()
         return True
     except Exception:

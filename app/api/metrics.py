@@ -35,8 +35,10 @@ def _require_metrics_auth_if_configured(
             headers={"WWW-Authenticate": 'Basic realm="metrics"'},
         )
 
-    if not (secrets.compare_digest(creds.username or "", user or "")
-            and secrets.compare_digest(creds.password or "", pwd or "")):
+    if not (
+        secrets.compare_digest(creds.username or "", user or "")
+        and secrets.compare_digest(creds.password or "", pwd or "")
+    ):
         raise HTTPException(
             status_code=401,
             detail="Unauthorized",

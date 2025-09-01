@@ -1,75 +1,63 @@
 // frontend/src/pages/Users/UsersView.tsx
-// Strengthened wiring to API, null-safety, and UX fallbacks without removing existing features.
-// - Fix API import path to alias (@/api/client)
-// - Add robust typing, safe fallbacks for name/role/dates/initial
-// - Keep existing layout and actions; only enhancements added
+// User Details page – improved on your base without removing features
+// - Corrects API imports to match client exports
+// - Uses backend field names (full_name, is_superuser) with safe fallbacks
+// - Robust loading/error states, confirmed delete (deactivate) action
+// - Consistent Tailwind UI with existing components
 
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { UsersApi, type User as ApiUser } from '@/api/client'
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { users as UsersApi, type User, type HttpError } from "@/api/client";
 import {
   ArrowLeftIcon,
-  PencilIcon,
+  PencilSquareIcon,
   TrashIcon,
   EnvelopeIcon,
   CalendarDaysIcon,
-  UserCircleIcon,
   ShieldCheckIcon,
-} from '@heroicons/react/24/outline'
-
-type ViewUser = ApiUser & {
-  role?: string
-  created_at?: string
-  updated_at?: string
-  is_active?: boolean
-}
+  UserCircleIcon,
+} from "@heroicons/react/24/outline";
 
 export default function UsersView() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const { id } = useParams<{ id: string }>();
+  const userId = id ? Number(id) : NaN;
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const userId = id ? parseInt(id, 10) : null
+  const { data, isLoading, isError, error } = useQuery<User, HttpError>({
+    queryKey: ["user", userId],
+    enabled: Number.isFinite(userId),
+    queryFn: () => UsersApi.get(userId),
+    staleTime: 30_000,
+    retry: (count, err) => (err?.status === 401 ? false : count < 2),
+  });
 
-  // Fetch user details
-  const { data: user, isLoading, error } = useQuery<ViewUser>({
-    queryKey: ['user', userId],
-    queryFn: () => UsersApi.get(userId!),
-    enabled: !!userId,
-  })
-
-  // Deactivate user mutation
-  const deleteMutation = useMutation({
-    mutationFn: UsersApi.deactivate,
+  const removeMutation = useMutation({
+    mutationFn: () => UsersApi.remove(userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-      navigate('/users')
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      navigate("/users");
     },
-    onError: (error) => {
-      console.error('Failed to deactivate user:', error)
-      alert('Failed to deactivate user. Please try again.')
+    onError: () => {
+      // Non-fatal; UI stays on the same page
     },
-  })
+  });
 
-  const formatDateDetailed = (v?: string) =>
-    v
-      ? new Date(v).toLocaleDateString('en-GB', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      : '—'
-
-  const handleDelete = () => {
-    if (!user) return
-    const label = (user.name && user.name.trim()) || user.email || `user #${user.id}`
-    const confirmed = window.confirm(
-      `Are you sure you want to deactivate ${label}? This action cannot be undone.`
-    )
-    if (confirmed) {
-      deleteMutation.mutate(user.id)
-    }
+  if (!Number.isFinite(userId)) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="glass-card p-8 text-center max-w-md">
+          <UserCircleIcon className="mx-auto h-12 w-12 text-trust-silver mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">Invalid user id</h3>
+          <p className="text-trust-silver mb-4">
+            The URL is missing a valid user identifier.
+          </p>
+          <Link to="/users" className="btn-primary">
+            Back to Users
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (isLoading) {
@@ -77,36 +65,64 @@ export default function UsersView() {
       <div className="flex items-center justify-center py-12">
         <div className="glass-card p-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-detecktiv-purple mx-auto mb-4"></div>
-          <p className="text-trust-silver">Loading user details.</p>
+          <p className="text-trust-silver">Loading user…</p>
         </div>
       </div>
-    )
+    );
   }
 
-  if (error || !user) {
+  if (isError || !data) {
+    const msg =
+      (error?.details as any)?.message ||
+      (error?.details as any)?.detail ||
+      error?.message ||
+      "Unable to load the user.";
     return (
       <div className="flex items-center justify-center py-12">
         <div className="glass-card p-8 text-center max-w-md">
           <UserCircleIcon className="mx-auto h-12 w-12 text-trust-silver mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">User not found</h3>
-          <p className="text-trust-silver mb-4">
-            The user you're looking for doesn't exist or you don't have permission to view them.
-          </p>
+          <p className="text-trust-silver mb-4">{String(msg)}</p>
           <Link to="/users" className="btn-primary">
             Back to Users
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
-  const safeName = user.name || '—'
-  const safeEmail = user.email || '—'
-  const initial = ((user.name?.[0] ?? user.email?.[0] ?? '?') + '').toUpperCase()
-  const roleLabel = (user.role && user.role.replace('_', ' ')) || (user.is_admin ? 'Admin' : 'User')
-  const createdAt = formatDateDetailed(user.created_at)
-  const updatedAt = formatDateDetailed(user.updated_at)
-  const active = user.is_active ?? true
+  // Safe derived fields (align with backend)
+  const safeName = data.full_name || "—";
+  const safeEmail = data.email || "—";
+  const initials = ((data.full_name?.[0] ?? data.email?.[0] ?? "?") + "").toUpperCase();
+  const roleLabel = data.role
+    ? data.role.replace("_", " ")
+    : data.is_superuser
+    ? "Admin"
+    : "User";
+  const isActive = data.is_active ?? true;
+
+  const createdAt = data.created_at
+    ? new Date(data.created_at).toLocaleDateString("en-GB", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "—";
+  const updatedAt = data.updated_at
+    ? new Date(data.updated_at).toLocaleDateString("en-GB")
+    : "—";
+
+  const onDelete = () => {
+    const label = (data.full_name && data.full_name.trim()) || data.email || `user #${data.id}`;
+    const confirmed = window.confirm(
+      `Are you sure you want to deactivate ${label}? This action cannot be undone.`
+    );
+    if (confirmed) {
+      removeMutation.mutate();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -121,22 +137,27 @@ export default function UsersView() {
           </Link>
           <div>
             <h1 className="text-2xl font-semibold text-white">User Details</h1>
-            <p className="mt-1 text-sm text-trust-silver">View and manage user information</p>
+            <p className="mt-1 text-sm text-trust-silver">
+              View and manage user information
+            </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
-          <Link to={`/users/${user.id}/edit`} className="btn-secondary inline-flex items-center space-x-2">
-            <PencilIcon className="h-4 w-4" />
+          <Link
+            to={`/users/${data.id}/edit`}
+            className="btn-secondary inline-flex items-center space-x-2"
+          >
+            <PencilSquareIcon className="h-4 w-4" />
             <span>Edit</span>
           </Link>
           <button
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
+            onClick={onDelete}
+            disabled={removeMutation.isPending}
             className="btn-destructive inline-flex items-center space-x-2 disabled:opacity-50"
           >
             <TrashIcon className="h-4 w-4" />
-            <span>{deleteMutation.isPending ? 'Deactivating...' : 'Deactivate'}</span>
+            <span>{removeMutation.isPending ? "Deactivating..." : "Deactivate"}</span>
           </button>
         </div>
       </div>
@@ -147,9 +168,7 @@ export default function UsersView() {
         <div className="bg-gradient-primary p-6">
           <div className="flex items-center space-x-4">
             <div className="h-16 w-16 rounded-large bg-white/20 backdrop-blur-glass flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">
-                {initial}
-              </span>
+              <span className="text-2xl font-bold text-white">{initials}</span>
             </div>
             <div>
               <h2 className="text-xl font-semibold text-white">{safeName}</h2>
@@ -157,10 +176,12 @@ export default function UsersView() {
               <div className="flex items-center space-x-4 mt-2">
                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
-                    active ? 'bg-success-green/20 text-success-green' : 'bg-gray-600/20 text-gray-300'
+                    isActive
+                      ? "bg-success-green/20 text-success-green"
+                      : "bg-gray-600/20 text-gray-300"
                   }`}
                 >
-                  {active ? 'Active' : 'Inactive'}
+                  {isActive ? "Active" : "Inactive"}
                 </span>
                 <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white capitalize">
                   {roleLabel}
@@ -174,7 +195,9 @@ export default function UsersView() {
         <div className="p-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
           {/* Basic Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Basic Information</h3>
+            <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-2">
+              Basic Information
+            </h3>
 
             <div className="space-y-3">
               <div className="flex items-start space-x-3">
@@ -205,7 +228,9 @@ export default function UsersView() {
 
           {/* Account Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Account Information</h3>
+            <h3 className="text-lg font-medium text-white border-b border-gray-700 pb-2">
+              Account Information
+            </h3>
 
             <div className="space-y-3">
               <div className="flex items-start space-x-3">
@@ -226,12 +251,18 @@ export default function UsersView() {
 
               <div className="flex items-start space-x-3">
                 <div className="h-5 w-5 flex items-center justify-center mt-0.5">
-                  <div className={`h-3 w-3 rounded-full ${active ? 'bg-success-green' : 'bg-gray-500'}`} />
+                  <div
+                    className={`h-3 w-3 rounded-full ${
+                      isActive ? "bg-success-green" : "bg-gray-500"
+                    }`}
+                  />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white">Status</p>
                   <p className="text-sm text-trust-silver">
-                    {active ? 'Active user with full access' : 'Inactive - access suspended'}
+                    {isActive
+                      ? "Active user with full access"
+                      : "Inactive - access suspended"}
                   </p>
                 </div>
               </div>
@@ -242,15 +273,22 @@ export default function UsersView() {
         {/* Action section */}
         <div className="border-t border-gray-700 bg-gray-800/30 px-6 py-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-trust-silver">User ID: {user.id}</p>
+            <p className="text-sm text-trust-silver">User ID: {data.id}</p>
             <div className="flex items-center space-x-3">
-              <Link to={`/users/${user.id}/edit`} className="btn-secondary">
+              <Link to={`/users/${data.id}/edit`} className="btn-secondary">
                 Edit User
               </Link>
+              <button
+                onClick={onDelete}
+                disabled={removeMutation.isPending}
+                className="btn-destructive disabled:opacity-50"
+              >
+                {removeMutation.isPending ? "Deactivating..." : "Deactivate"}
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

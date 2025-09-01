@@ -65,6 +65,7 @@ from typing import List, Optional
 # Helpers
 # ------------------------------------------------------------------------------
 
+
 def _env(key: str, default: Optional[str] = None) -> Optional[str]:
     v = os.getenv(key)
     return v if v is not None else default
@@ -122,6 +123,7 @@ def _build_postgres_url() -> str:
 # Settings object
 # ------------------------------------------------------------------------------
 
+
 class Settings:
     # Meta
     app_name: str
@@ -173,8 +175,12 @@ class Settings:
         # JWT / Auth
         self.secret_key = _env("SECRET_KEY", "change-me")
         self.jwt_alg = _env("JWT_ALG", "HS256")
-        self.access_token_expires_seconds = _env_int("ACCESS_TOKEN_EXPIRES_SECONDS", 900)          # 15 min
-        self.refresh_token_expires_seconds = _env_int("REFRESH_TOKEN_EXPIRES_SECONDS", 14 * 86400) # 14 days
+        self.access_token_expires_seconds = _env_int(
+            "ACCESS_TOKEN_EXPIRES_SECONDS", 900
+        )  # 15 min
+        self.refresh_token_expires_seconds = _env_int(
+            "REFRESH_TOKEN_EXPIRES_SECONDS", 14 * 86400
+        )  # 14 days
         self.jwt_iss = _env("JWT_ISS", None)
         self.jwt_aud = _env("JWT_AUD", None)
         self.jwt_clock_skew_seconds = _env_int("JWT_CLOCK_SKEW_SECONDS", 60)
@@ -182,7 +188,9 @@ class Settings:
         # Auth cookies (optional)
         self.auth_cookies = _env_bool("AUTH_COOKIES", False)
         self.auth_cookie_secure = _env_bool("AUTH_COOKIE_SECURE", False)
-        self.auth_cookie_samesite = _env("AUTH_COOKIE_SAMESITE", "lax").lower()  # lax|strict|none
+        self.auth_cookie_samesite = _env(
+            "AUTH_COOKIE_SAMESITE", "lax"
+        ).lower()  # lax|strict|none
         self.auth_cookie_domain = _env("AUTH_COOKIE_DOMAIN", "")
         self.auth_cookie_path = _env("AUTH_COOKIE_PATH", "/")
         self.auth_cookie_max_age = _env_int("AUTH_COOKIE_MAX_AGE", 0)
@@ -190,7 +198,9 @@ class Settings:
         self.refresh_token_cookie = _env("REFRESH_TOKEN_COOKIE", "refresh_token")
 
         # CORS
-        self.cors_origins = _split_csv(_env("CORS_ORIGINS", ""))  # empty => allow none by default
+        self.cors_origins = _split_csv(
+            _env("CORS_ORIGINS", "")
+        )  # empty => allow none by default
         self.cors_allow_credentials = _env_bool("CORS_ALLOW_CREDENTIALS", True)
         self.cors_allow_methods = _split_csv(_env("CORS_ALLOW_METHODS", "*")) or ["*"]
         self.cors_allow_headers = _split_csv(_env("CORS_ALLOW_HEADERS", "*")) or ["*"]

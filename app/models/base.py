@@ -21,6 +21,7 @@ def _default_schema() -> str:
         or "app"
     )
 
+
 SCHEMA = _default_schema()
 
 # Keep Alembic diffs stable and constraint names predictable
@@ -44,6 +45,7 @@ class Base(DeclarativeBase):
     Adds common audit fields and simple (de)serialization helpers.
     Applies schema-qualified metadata to all inheriting tables.
     """
+
     metadata = _METADATA  # <-- schema-qualified metadata
 
     created_at: Mapped[datetime] = mapped_column(
@@ -72,7 +74,9 @@ class Base(DeclarativeBase):
             result[column.name] = value
         return result
 
-    def update_from_dict(self, data: Dict[str, Any], exclude: Optional[Set[str]] = None) -> None:
+    def update_from_dict(
+        self, data: Dict[str, Any], exclude: Optional[Set[str]] = None
+    ) -> None:
         exclude = exclude or {"id", "created_at"}
         for key, value in data.items():
             if key not in exclude and hasattr(self, key):
@@ -102,9 +106,9 @@ def _normalize_driver(url: str) -> str:
         if "+psycopg2" in url or "+psycopg" in url or "+asyncpg" in url:
             return url
         if url.startswith("postgres://"):
-            return "postgresql+psycopg2://" + url[len("postgres://"):]
+            return "postgresql+psycopg2://" + url[len("postgres://") :]
         if url.startswith("postgresql://"):
-            return "postgresql+psycopg2://" + url[len("postgresql://"):]
+            return "postgresql+psycopg2://" + url[len("postgresql://") :]
         return url
     except Exception:
         return url
@@ -215,6 +219,7 @@ def _make_local_engine():
 # Try to reuse the central engine to avoid duplicate pools/config.
 try:
     from app.core.session import engine as _central_engine  # type: ignore
+
     engine = _central_engine
 except Exception:
     engine = _make_local_engine()

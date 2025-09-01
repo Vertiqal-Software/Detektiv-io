@@ -197,7 +197,10 @@ def _build_engine(**kw) -> Engine:
                     # last attempt -> raise
                     log.warning(
                         "psycopg2.connect failed (attempt %s/%s) params=%s err=%s",
-                        attempt, retries, _masked_params(params), e
+                        attempt,
+                        retries,
+                        _masked_params(params),
+                        e,
                     )
                     raise
                 # backoff with jitter
@@ -205,7 +208,9 @@ def _build_engine(**kw) -> Engine:
                 delay = delay * (0.9 + 0.2 * random.random())  # 10% jitter
                 log.info(
                     "psycopg2.connect failed (attempt %s/%s), retrying in %.2fs ...",
-                    attempt, retries, delay
+                    attempt,
+                    retries,
+                    delay,
                 )
                 time.sleep(delay)
 

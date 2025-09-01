@@ -20,6 +20,7 @@ router = APIRouter(prefix="/companies-house", tags=["Companies"])
 
 class ErrorResponse(BaseModel):
     """Minimal error shape for Swagger docs (avoid circular imports)."""
+
     detail: str = Field(..., example="Upstream Companies House error")
 
 
@@ -55,13 +56,20 @@ def _client() -> CompaniesHouseClient:
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def search_companies(
     q: str = Query(..., min_length=1, description="Free-text query for company search"),
-    items_per_page: int = Query(20, ge=1, le=100, description="Companies House page size"),
-    start_index: int = Query(0, ge=0, description="Offset into Companies House results"),
+    items_per_page: int = Query(
+        20, ge=1, le=100, description="Companies House page size"
+    ),
+    start_index: int = Query(
+        0, ge=0, description="Offset into Companies House results"
+    ),
 ) -> Dict[str, Any]:
     """
     Proxy to Companies House /search/companies.
@@ -85,7 +93,10 @@ def search_companies(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_profile(
@@ -110,16 +121,23 @@ def company_profile(
     responses={
         422: {"model": ErrorResponse, "description": "Validation error"},
         502: {"model": ErrorResponse, "description": "Upstream error"},
-        503: {"model": ErrorResponse, "description": "Service unavailable (missing API key)"},
+        503: {
+            "model": ErrorResponse,
+            "description": "Service unavailable (missing API key)",
+        },
     },
 )
 def company_full(
     company_number: str = Path(..., description="Companies House company number"),
     max_filings: int = Query(500, ge=1, le=2000, description="Max filings to collect"),
-    max_officers: int = Query(500, ge=1, le=2000, description="Max officers to collect"),
+    max_officers: int = Query(
+        500, ge=1, le=2000, description="Max officers to collect"
+    ),
     max_psc: int = Query(500, ge=1, le=2000, description="Max PSC records to collect"),
     max_charges: int = Query(500, ge=1, le=2000, description="Max charges to collect"),
-    max_uk_establishments: int = Query(500, ge=1, le=2000, description="Max branches to collect"),
+    max_uk_establishments: int = Query(
+        500, ge=1, le=2000, description="Max branches to collect"
+    ),
 ) -> Dict[str, Any]:
     """
     Aggregates profile + filings + officers + PSC + charges + UK establishments

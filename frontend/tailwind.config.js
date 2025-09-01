@@ -1,11 +1,13 @@
-# frontend/tailwind.config.js
-
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+
+  // Added: opt-in dark mode via a `.dark` class (no behavior change unless you use it)
+  darkMode: "class",
+
   theme: {
     extend: {
       colors: {
@@ -81,5 +83,7 @@ export default {
       }
     },
   },
+
+  // Kept empty on purpose; add official plugins here later if you install them
   plugins: [],
 }

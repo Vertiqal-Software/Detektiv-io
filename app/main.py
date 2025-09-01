@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field  # keep Field for examples
 try:
     from app.logging_setup import setup_logging, install_access_logger
 except Exception:  # pragma: no cover
-    setup_logging = None   # type: ignore
+    setup_logging = None  # type: ignore
     install_access_logger = None  # type: ignore
 
 # --- Optional centralized error handlers (import-safe) ---
@@ -43,11 +43,12 @@ try:
 except Exception:  # pragma: no cover
     APP_BUILD_VERSION = None
 
-# --- Rate limiting middleware (import-safe) ---
+# --- Rate limiting bootstrap (import-safe) ---
+# Switched to the new, optional rate limit installer in app.core.rate_limit
 try:
-    from app.middleware.rate_limit import RateLimitMiddleware
+    from app.core.rate_limit import install_rate_limiter
 except Exception:  # pragma: no cover
-    RateLimitMiddleware = None  # type: ignore
+    install_rate_limiter = None  # type: ignore
 
 # --- Central settings (additive, non-breaking) ---
 try:
@@ -89,7 +90,8 @@ def get_db_url() -> str:
     # Prefer app.core.config if present
     if settings:
         try:
-            return _normalize_driver(settings.get_database_url())
+            # use canonical DSN exposed by settings
+            return _normalize_driver(settings.sqlalchemy_database_uri)  # <-- fixed
         except Exception:
             pass
 
@@ -105,6 +107,7 @@ def get_db_url() -> str:
     sslmode = os.getenv("POSTGRES_SSLMODE", "disable")
 
     from sqlalchemy.engine import URL
+
     return str(
         URL.create(
             drivername="postgresql+psycopg2",
@@ -150,8 +153,10 @@ def get_engine() -> Engine:
     global _engine
     if _engine is None:
         try:
-            from app.core.session import engine as core_engine  # canonical engine
-            _engine = core_engine
+            # use the canonical engine factory we defined in app.core.session
+            from app.core.session import get_engine as core_get_engine  # <-- fixed
+
+            _engine = core_get_engine()
             logger.info("Database engine (canonical) acquired from app.core.session")
         except Exception:
             url = get_db_url()
@@ -180,12 +185,12 @@ def reset_companies_table_if_test() -> None:
                     DO $$
                     BEGIN
                       IF EXISTS (
-                        SELECT 1 FROM information_schema.tables 
+                        SELECT 1 FROM information_schema.tables
                         WHERE table_schema = 'app' AND table_name = 'companies'
                       ) THEN
                         EXECUTE 'TRUNCATE TABLE app.companies RESTART IDENTITY CASCADE';
                       ELSIF EXISTS (
-                        SELECT 1 FROM information_schema.tables 
+                        SELECT 1 FROM information_schema.tables
                         WHERE table_schema = 'public' AND table_name = 'companies'
                       ) THEN
                         EXECUTE 'TRUNCATE TABLE public.companies RESTART IDENTITY CASCADE';
@@ -202,6 +207,7 @@ def reset_companies_table_if_test() -> None:
 # ============================================================================
 # FastAPI App Setup
 # ============================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -245,9 +251,9 @@ app = FastAPI(
     openapi_tags=TAGS_METADATA,
     swagger_ui_parameters={
         "displayRequestDuration": True,  # show request timings
-        "tryItOutEnabled": True,         # enable 'Try it out' by default
-        "docExpansion": "list",          # expand tag groups
-        "filter": True                   # adds a search/filter box
+        "tryItOutEnabled": True,  # enable 'Try it out' by default
+        "docExpansion": "list",  # expand tag groups
+        "filter": True,  # adds a search/filter box
     },
 )
 
@@ -267,20 +273,24 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return openapi_schema
 
+
 app.openapi = custom_openapi
 
 # ============================================================================
 # Middleware stack
 # Order matters: the last added is outermost and runs first on requests.
 # We want access logs and CORS to still apply to 429 responses from the limiter.
-# So we add: RateLimit (inner) -> CORS (outer) -> Access Logger (outermost)
+# So we add: RateLimit (inner) -> GZip -> CORS (outer) -> Access Logger (outermost)
 # ============================================================================
 
-# 1) Rate Limiting (inner)
-if RateLimitMiddleware:
-    app.add_middleware(RateLimitMiddleware)
+# 1) Rate Limiting (inner) — install SlowAPI middleware if available
+if install_rate_limiter:
+    try:
+        install_rate_limiter(app)  # safe no-op if SlowAPI not installed
+    except Exception:  # pragma: no cover
+        logger.debug("install_rate_limiter failed (ignored)", exc_info=True)
 
-# + Add gzip compression (outer-ish; before CORS is fine)
+# + Add gzip compression (inner-ish; before CORS is fine)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # 2) CORS (outer) — use configured origins if provided, else env, else "*"
@@ -293,7 +303,12 @@ except Exception:
 
 if _cors_origins == ["*"]:
     # Also honor env vars when settings are not present
-    env_allow_all = (os.getenv("CORS_ALLOW_ALL") or "").strip().lower() in {"1", "true", "yes", "y"}
+    env_allow_all = (os.getenv("CORS_ALLOW_ALL") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
     env_origins = os.getenv("CORS_ORIGINS") or os.getenv("CORS_ALLOWED_ORIGINS")
     if env_allow_all:
         _cors_origins = ["*"]
@@ -312,6 +327,7 @@ app.add_middleware(
 if install_access_logger:
     install_access_logger(app)
 
+
 # + Security headers middleware (function middleware runs inside class middlewares)
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -322,6 +338,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("X-XSS-Protection", "1; mode=block")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return response
+
 
 # Per-request ID (function middleware executes inside class-based middlewares)
 @app.middleware("http")
@@ -364,6 +381,7 @@ if install_error_handlers:
 # ============================================================================
 # Health Endpoints
 # ============================================================================
+
 
 @app.get("/health", tags=["Health"])
 def health() -> Dict[str, str]:
@@ -413,6 +431,7 @@ def info() -> Dict[str, Any]:
 # Pydantic Models (local Companies examples)
 # ============================================================================
 
+
 class CompanyCreate(BaseModel):
     name: str = Field(..., example="Acme Ltd")
     website: Optional[str] = Field(None, example="https://acme.example")
@@ -441,6 +460,7 @@ except Exception:  # pragma: no cover
     # Fallback so app still boots; protected endpoints will return 500 until configured.
     def get_current_user(*args, **kwargs):
         raise HTTPException(status_code=500, detail="Auth not configured")
+
     class User:  # type: ignore
         pass
 
@@ -595,6 +615,7 @@ def get_company(
 # Mount modular API routers under /v1 and add a fallback if include failed
 # ============================================================================
 
+
 def _route_exists(path: str, method: Optional[str] = None) -> bool:
     for r in app.routes:
         r_path = getattr(r, "path", None)
@@ -613,6 +634,7 @@ def _ensure_critical_routes() -> None:
     if not _route_exists("/v1/auth/login", method="POST"):
         try:
             from app.api.auth import router as auth_router
+
             app.include_router(auth_router, prefix="/v1")
             logger.warning("Fallback mounted: app.api.auth at /v1")
         except Exception as e:
@@ -622,6 +644,7 @@ def _ensure_critical_routes() -> None:
     if not _route_exists("/v1/users/me", method="GET"):
         try:
             from app.api.users import router as users_router
+
             app.include_router(users_router, prefix="/v1")
             logger.warning("Fallback mounted: app.api.users at /v1")
         except Exception as e:
@@ -643,6 +666,7 @@ def _mount_api_routers() -> None:
     try:
         # *** Step 7 aggregator ***
         from app.api.router import api_router  # aggregated modular router
+
         app.include_router(api_router, prefix="/v1")
         logger.info("Mounted modular API router at prefix /v1")
         app.state.api_router_mounted = True
@@ -655,13 +679,15 @@ def _mount_api_routers() -> None:
     # Expose ops-friendly root endpoints where applicable (non-breaking)
     try:
         from app.api.metrics import router as metrics_router
+
         app.include_router(metrics_router)  # /metrics at root
         logger.info("Mounted metrics router at /metrics")
     except Exception:
         pass
     try:
         from app.api.health import router as health_router
-        app.include_router(health_router)   # /health (also already have local /health)
+
+        app.include_router(health_router)  # /health (also already have local /health)
         logger.info("Mounted health router")
     except Exception:
         pass
@@ -708,5 +734,10 @@ if __name__ == "__main__":
     port = int(os.getenv("API_PORT", "8000") or "8000")
     # support both DEVELOPMENT_MODE=true and UVICORN_RELOAD=1
     reload_mode = (os.getenv("DEVELOPMENT_MODE") or "false").lower() == "true"
-    reload_mode = reload_mode or (os.getenv("UVICORN_RELOAD") or "0").lower() in {"1", "true", "yes", "y"}
+    reload_mode = reload_mode or (os.getenv("UVICORN_RELOAD") or "0").lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
     uvicorn.run(app, host=host, port=port, reload=reload_mode)

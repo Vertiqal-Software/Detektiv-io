@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.main_enhanced import app
 from app.core.database import get_db, get_db_session
-from app.models.company import Company
 
 # Skip tests if database testing is not enabled
 pytestmark = pytest.mark.skipif(

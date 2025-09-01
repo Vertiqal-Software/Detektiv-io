@@ -10,7 +10,19 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "strict": true
+    "strict": true,
+
+    // Added for alias compatibility with Vite config
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    // Added to enable Vite-specific typings (e.g., import.meta, glob imports)
+    "types": ["vite/client"],
+
+    // Added to prevent case-sensitivity pitfalls across OS/filesystems
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src"]
 }

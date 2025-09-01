@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import DateTime, String, func, Index, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, validates
@@ -27,7 +26,9 @@ class Tenant(Base):
     )
 
     # Migrations enforce NOT NULL after backfill, so reflect that here.
-    name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Tenant display name")
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, comment="Tenant display name"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -42,9 +43,7 @@ class Tenant(Base):
     )
 
     # Added: index on name to speed up admin lookups and autocomplete
-    __table_args__ = (
-        Index("ix_tenants_name", "name"),
-    )
+    __table_args__ = (Index("ix_tenants_name", "name"),)
 
     # Back-compat alias: allow existing code to use .key while the DB column remains tenant_key
     @property

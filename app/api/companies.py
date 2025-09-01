@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+
 # -----------------------------------------------------------------------------
 # Resilient engine acquisition:
 # 1) app.main.get_engine (preferred; matches app startup)
@@ -21,28 +22,34 @@ def _resolve_get_engine():
     # Preferred: app.main.get_engine
     try:  # pragma: no cover
         from app.main import get_engine as _ge  # type: ignore
+
         return _ge
     except Exception:
         pass
     # Canonical central engine (wrap into a function)
     try:
         from app.core.session import engine as _central_engine  # type: ignore
+
         def _ge():
             return _central_engine
+
         return _ge
     except Exception:
         pass
     # Original fallbacks (kept for compatibility)
     try:  # pragma: no cover
         from app.main_db import get_engine as _ge  # type: ignore
+
         return _ge
     except Exception:
         pass
     try:  # pragma: no cover
         from db.main import get_engine as _ge  # type: ignore
+
         return _ge
     except Exception as e:
         raise RuntimeError("No engine provider found for companies API") from e
+
 
 get_engine = _resolve_get_engine()
 
@@ -51,6 +58,7 @@ router = APIRouter(tags=["companies"])
 _log = logging.getLogger("api.companies")
 
 # ----- Schemas ---------------------------------------------------------------
+
 
 class CompanyCreate(BaseModel):
     # Add examples to improve Swagger UX; validation stays permissive
@@ -69,7 +77,9 @@ class CompanyOut(BaseModel):
 class ErrorResponse(BaseModel):
     detail: str = Field(..., example="company name already exists")
 
+
 # ----- Helpers ---------------------------------------------------------------
+
 
 def _row_to_company_out(row: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -97,7 +107,9 @@ def _names_equal_ci(a: Optional[str], b: Optional[str]) -> bool:
         and a.strip().lower() == b.strip().lower()
     )
 
+
 # ----- Routes ----------------------------------------------------------------
+
 
 @router.post(
     "/companies",
@@ -136,9 +148,7 @@ def create_company(payload: CompanyCreate) -> CompanyOut:
     try:
         with engine.begin() as conn:
             row = (
-                conn.execute(
-                    sql_insert, {"name": name_clean, "website": website_clean}
-                )
+                conn.execute(sql_insert, {"name": name_clean, "website": website_clean})
                 .mappings()
                 .one()
             )
@@ -170,7 +180,9 @@ def create_company(payload: CompanyCreate) -> CompanyOut:
                 _log.warning("lookup-after-conflict failed", extra={"error": str(le)})
 
         # Normalize message to match tests exactly
-        raise HTTPException(status_code=409, detail="company name already exists") from e
+        raise HTTPException(
+            status_code=409, detail="company name already exists"
+        ) from e
 
     except SQLAlchemyError as e:
         _log.exception("create_company SQL error", extra={"name": name_clean})

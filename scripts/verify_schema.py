@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, text, inspect
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except Exception:
     pass
@@ -11,11 +12,11 @@ except Exception:
 
 def db_url() -> str:
     user = os.getenv("POSTGRES_USER", "postgres")
-    pwd  = os.getenv("POSTGRES_PASSWORD", "")
+    pwd = os.getenv("POSTGRES_PASSWORD", "")
     host = os.getenv("POSTGRES_HOST", "127.0.0.1")
     port = os.getenv("POSTGRES_PORT", "5432")
-    db   = os.getenv("POSTGRES_DB", "detecktiv")
-    ssl  = os.getenv("POSTGRES_SSLMODE", "disable")
+    db = os.getenv("POSTGRES_DB", "detecktiv")
+    ssl = os.getenv("POSTGRES_SSLMODE", "disable")
     return f"postgresql+psycopg2://{user}:{pwd}@{host}:{port}/{db}?sslmode={ssl}"
 
 
@@ -58,10 +59,14 @@ def main():
         conn.execute(text(f'SET search_path TO "{schema}", public'))
 
         db, cur_schema, host, port = conn.execute(
-            text("select current_database(), current_schema(), inet_server_addr(), inet_server_port()")
+            text(
+                "select current_database(), current_schema(), inet_server_addr(), inet_server_port()"
+            )
         ).one()
         spath = conn.execute(text("SHOW search_path")).scalar()
-        print(f"[info] Connected -> db={db}, current_schema={cur_schema}, host={host}, port={port}")
+        print(
+            f"[info] Connected -> db={db}, current_schema={cur_schema}, host={host}, port={port}"
+        )
         print(f"[info] search_path: {spath}")
 
         # Show both target schema and public
@@ -70,9 +75,13 @@ def main():
 
         # Default tenant check in target schema
         print(f"\n[Default tenant in {schema}] ", end="")
-        exists = conn.execute(text("select to_regclass(:qname)"), {"qname": f"{schema}.tenants"}).scalar()
+        exists = conn.execute(
+            text("select to_regclass(:qname)"), {"qname": f"{schema}.tenants"}
+        ).scalar()
         if exists:
-            tid = conn.execute(text(f"SELECT id FROM {schema}.tenants WHERE tenant_key='default'")).scalar()
+            tid = conn.execute(
+                text(f"SELECT id FROM {schema}.tenants WHERE tenant_key='default'")
+            ).scalar()
             print("id:", tid)
         else:
             print("table missing")

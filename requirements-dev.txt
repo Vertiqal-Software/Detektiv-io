@@ -35,7 +35,7 @@ mkdocs-material>=9.5,<10.0
 
 # Development Tools
 ipython>=8.20,<9.0  # Better REPL
-rich>=13.7,<14.0    # Pretty printing and logging
+rich>=13.7,<15.0    # Pretty printing and logging
 
 # API Documentation Testing
 openapi-spec-validator>=0.7,<1.0

@@ -11,7 +11,7 @@ pytest-mock>=3.12,<4.0
 httpx>=0.27,<1.0  # For TestClient and Companies House API testing
 
 # Database Testing
-pytest-postgresql>=5.0,<6.0  # For isolated test databases
+pytest-postgresql>=5.0,<8.0  # For isolated test databases
 
 # Code Quality & Formatting  
 black>=24.0,<25.0

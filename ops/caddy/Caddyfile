@@ -1,0 +1,278 @@
+{
+	# Global options
+	# Set your ACME/Let's Encrypt email via ACME_EMAIL env var for cert notifications.
+	# email {$ACME_EMAIL}
+	# Enable HTTP/3 (QUIC)
+	servers {
+		timeouts {
+			read_header 10s
+			read_body   30s
+			write       30s
+			idle        120s
+		}
+	}
+}
+
+# -----------------------------------------------------------------------------
+# HTTP site (dev/local). In production with real domains, you can add a TLS
+# site block like: yourdomain.com { ... } and enable automatic HTTPS.
+# This config keeps HTTP-only for local unless you provision certs.
+# -----------------------------------------------------------------------------
+:80 {
+	encode zstd gzip
+
+	# Basic security headers (API also sets these; duplication is harmless)
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Permitted-Cross-Domain-Policies "none"
+		# Strict-Transport-Security is only meaningful over HTTPS
+	}
+
+	# ------------------------------- API ROUTES -------------------------------
+	route {
+		# Prometheus metrics (optional auth handled in the API)
+		handle_path /metrics* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+
+		# Common API prefixes (prefix stripping)
+		handle_path /api* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+
+		# Direct API endpoints at root
+		handle_path /health* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /readiness* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /ready {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /version {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+
+		# App routes exposed by the API (users/auth/companies/etc.)
+		handle_path /v1/* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /users* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /companies* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /companies-house* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+		handle_path /snapshot* {
+			reverse_proxy api:8000 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+
+		# ---------------------------------------------------------------------
+		# FRONTEND SPA
+		# Route the legacy /app* prefix and the default catch-all to the
+		# dedicated frontend service (served by `serve -s dist` on :4173).
+		# ---------------------------------------------------------------------
+		handle_path /app* {
+			# Legacy support for /app prefix; strip it and proxy to frontend.
+			reverse_proxy frontend:4173 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+
+		# Optional monitoring UIs when the 'monitoring' profile is enabled
+		handle_path /grafana* {
+			reverse_proxy grafana:3000
+		}
+		handle_path /prometheus* {
+			reverse_proxy prometheus:9090
+		}
+
+		# Fallback: route everything else to the standalone frontend SPA
+		handle {
+			# Keep the rewrite directive but make it a no-op to avoid breaking asset paths.
+			# The SPA server handles client-side routing/fallback.
+			rewrite * {path}
+			reverse_proxy frontend:4173 {
+				header_up X-Forwarded-Proto {scheme}
+				header_up X-Forwarded-For {remote}
+				header_up X-Forwarded-Host {host}
+				header_up Host {upstream_hostport}
+				transport http {
+					versions 1.1
+					read_buffer 8192
+					read_timeout 30s
+					write_timeout 30s
+					dial_timeout 5s
+					keepalive 30s
+				}
+			}
+		}
+	}
+
+	# Access logs to stdout (console format)
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}

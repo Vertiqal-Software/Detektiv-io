@@ -1,0 +1,1 @@
+# stride-diagram.md — stub

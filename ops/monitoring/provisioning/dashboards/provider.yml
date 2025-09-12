@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: Detecktiv Dashboards
+    orgId: 1
+    folder: Detecktiv
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # This path is inside the Grafana container (mounted from ./ops/monitoring/provisioning/dashboards)
+      path: /etc/grafana/provisioning/dashboards
+      # Look for .json dashboard files only
+      foldersFromFilesStructure: false

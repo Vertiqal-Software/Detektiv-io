@@ -5,36 +5,58 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+test.db
 
 # Secrets / env
 .env
 .env.*.local
+.env.docker
 
 # Local data & logs
 data/
 logs/
+*.log
 
 # OS/editor junk
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Node
+# Node/Frontend
 node_modules/
 dist/
 build/
+.next/
+coverage/
+*.tsbuildinfo
 
-.env.docker
-# Local env files
-.env
+# Local env files (cleaned up)
 .env.*
 !.env.example
 !.env.docker.example
-.env.docker
-.env.docker
-.env
-.env.docker
 
-.stack.yml
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Claude Code
+.claude/
+
+# Project specific
 backups/
+.stack.yml
+setup_db.py
+run_migrations.bat

@@ -1,8 +1,47 @@
-.git
+# Scaffold .dockerignore
+# Version control
+.git/
 .gitignore
-*.pyc
+
+# Dependencies
+node_modules/
+.venv/
 __pycache__/
+*.pyc
+
+# Development
 .env
-data/
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
 logs/
-backups/
+
+# Test coverage
+coverage/
+.coverage
+.nyc_output/
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Documentation build
+site/
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp

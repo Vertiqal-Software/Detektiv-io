@@ -1,0 +1,59 @@
+# =============================================================================
+# Prometheus configuration for detecktiv-io (dev/prod)
+# - Scrapes the API's /metrics endpoint
+# - Scrapes Prometheus itself
+# - Safe defaults; no remote_write; optional basic_auth commented out
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  # You can tag all series from this stack (useful with multiple envs)
+  external_labels:
+    stack: detecktiv
+    env: ${ENVIRONMENT}
+
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # Prometheus self-scrape
+  # ---------------------------------------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      # Inside the Prometheus container, localhost:9090 points to itself
+      - targets: ["localhost:9090"]
+        labels:
+          service: prometheus
+
+  # ---------------------------------------------------------------------------
+  # API /metrics
+  # ---------------------------------------------------------------------------
+  - job_name: detecktiv_api
+    scheme: http
+    metrics_path: /metrics
+    honor_timestamps: true
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          service: api
+    # If you enable metrics Basic Auth in the API, you can uncomment this block
+    # and set static credentials here (Prometheus does NOT expand env vars):
+    # basic_auth:
+    #   username: metrics
+    #   password: change-me
+    # You can also add headers if your stack requires a tenant header:
+    # headers:
+    #   X-Tenant-ID: public
+
+  # ---------------------------------------------------------------------------
+  # (Optional) Additional jobs can be added here later, e.g. node_exporter,
+  # blackbox_exporter, database exporters, etc.
+  # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# remote_write:
+#   - url: https://your-remote-tsdb/api/v1/write
+#     basic_auth:
+#       username: ...
+#       password: ...
+# ---------------------------------------------------------------------------

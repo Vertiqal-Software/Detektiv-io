@@ -1,0 +1,1 @@
+# tenancy.py — stub

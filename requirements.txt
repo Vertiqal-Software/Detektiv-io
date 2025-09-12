@@ -1,20 +1,45 @@
-fastapi>=0.110,<1.0
-uvicorn[standard]>=0.25,<1.0
+# Sales Intelligence Platform Dependencies
 
-SQLAlchemy>=2.0,<3.0
-alembic>=1.13,<2.0
-psycopg2-binary>=2.9,<3.0
+# Core FastAPI stack
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.4.0
 
-python-dotenv>=1.0,<2.0
-pydantic>=2.0,<3.0
-pydantic-settings>=2.0,<3.0
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.12.0
 
-fastapi[all]>=0.110,<1.0
-structlog>=23.0,<24.0
-gunicorn>=21.0,<22.0
+# HTTP clients for data gathering
+httpx>=0.25.0
+requests>=2.31.0
 
-# Added: HTTP client for Companies House + external API calls
-httpx>=0.27,<1.0
+# Web scraping and parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
 
-# Added: Robust retries for external APIs (rate limiting/backoff)
-tenacity>=8.2,<9.0
+# Data analysis
+pandas>=2.1.0
+numpy>=1.24.0
+
+# Authentication and security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+
+# Environment and configuration
+python-dotenv>=1.0.0
+pydantic-settings>=2.0.0
+
+# Logging and monitoring
+structlog>=23.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0
+
+# Optional: For enhanced data processing
+# scrapy>=2.11.0  # Uncomment if you need heavy-duty scraping
+# selenium>=4.15.0  # Uncomment if you need browser automation
+# openpyxl>=3.1.0  # For Excel file processing

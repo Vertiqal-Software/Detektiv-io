@@ -1,0 +1,6 @@
+-r base.txt
+
+# Production-only dependencies
+gunicorn>=20.1.0
+prometheus-client>=0.16.0
+sentry-sdk[fastapi]>=1.25.0

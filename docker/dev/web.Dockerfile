@@ -1,1 +1,18 @@
-# web.Dockerfile — stub
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY apps/web/package.json apps/web/package-lock.json* ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY apps/web/ ./
+
+# Expose port
+EXPOSE 3000
+
+# Start development server
+CMD ["npm", "run", "dev", "--", "--host"]

@@ -129,3 +129,22 @@ env:
 	@echo "CORS_ORIGINS     = $${CORS_ORIGINS:-*}"
 	@echo "ACCESS_TOKEN_TTL = $${ACCESS_TOKEN_EXPIRES_SECONDS:-900}s"
 	@echo "REFRESH_TOKEN_TTL= $${REFRESH_TOKEN_EXPIRES_SECONDS:-1209600}s"
+
+# Scaffold development targets -----------------------------------------------
+
+.PHONY: dev-up
+dev-up:
+	docker compose -f docker-compose.dev.yml up -d --build
+
+.PHONY: dev-down
+dev-down:
+	docker compose -f docker-compose.dev.yml down
+
+.PHONY: test-api
+test-api:
+	cd apps/api && PYTHONPATH=. pytest -q
+
+.PHONY: lint-api
+lint-api:
+	black --check apps/api
+	flake8 apps/api

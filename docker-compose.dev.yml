@@ -1,51 +1,50 @@
-# Sales Intelligence Platform - Docker Compose Configuration
-
 version: '3.8'
 
 services:
   # PostgreSQL Database
   database:
     image: postgres:15-alpine
-    container_name: sales-intelligence-db
+    container_name: detecktiv-db-dev
     environment:
-      POSTGRES_DB: sales_intelligence
-      POSTGRES_USER: sales_user
-      POSTGRES_PASSWORD: sales_secure_password
+      POSTGRES_DB: detecktiv
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: detecktiv_dev_pass
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
+      - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sales_user -d sales_intelligence"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d detecktiv"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
 
-  # Sales Intelligence API
+  # Backend API
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
-    container_name: sales-intelligence-api
+      dockerfile: docker/dev/backend.Dockerfile
+    container_name: detecktiv-api-dev
     environment:
       # Database connection
       POSTGRES_HOST: database
       POSTGRES_PORT: 5432
-      POSTGRES_DB: sales_intelligence
-      POSTGRES_USER: sales_user
-      POSTGRES_PASSWORD: sales_secure_password
-      
-      # Companies House API (add your key here)
-      COMPANIES_HOUSE_API_KEY: ${COMPANIES_HOUSE_API_KEY:-}
+      POSTGRES_DB: detecktiv
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: detecktiv_dev_pass
+      POSTGRES_SCHEMA: app
       
       # API configuration
       ENVIRONMENT: development
-      LOG_LEVEL: INFO
+      DEBUG: true
+      LOG_LEVEL: DEBUG
       
       # CORS configuration
-      CORS_ALLOW_ORIGINS: http://localhost:3000,http://localhost:5173
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      
+      # Auth
+      SECRET_KEY: dev-secret-key-change-in-production
       
     ports:
       - "8000:8000"
@@ -53,41 +52,34 @@ services:
       database:
         condition: service_healthy
     volumes:
-      - ./src/backend:/app/src/backend
-      - ./src/intelligence:/app/src/intelligence
-      - ./src/scrapers:/app/src/scrapers
-      - ./src/analytics:/app/src/analytics
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - ./apps/api:/app/apps/api
     restart: unless-stopped
 
   # Frontend (React)
-  frontend:
+  web:
     build:
-      context: ./src/frontend
-      dockerfile: Dockerfile
-    container_name: sales-intelligence-frontend
+      context: .
+      dockerfile: docker/dev/web.Dockerfile
+    container_name: detecktiv-web-dev
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: http://localhost:8000
-      REACT_APP_NAME: "Sales Intelligence Platform"
+      VITE_API_URL: http://localhost:8000
     depends_on:
-      api:
-        condition: service_healthy
+      - api
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
     restart: unless-stopped
 
-  # Redis for caching and job queues (optional)
+  # Redis for caching and job queues
   redis:
     image: redis:7-alpine
-    container_name: sales-intelligence-redis
+    container_name: detecktiv-redis-dev
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redis_data_dev:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -96,5 +88,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
+  postgres_data_dev:
+  redis_data_dev:

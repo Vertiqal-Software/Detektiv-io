@@ -1,0 +1,43 @@
+# requirements.txt
+#
+# Based on your uploaded file; kept as-is and only strengthened with comments. :contentReference[oaicite:0]{index=0}
+#
+# Notes:
+# - This stack supports: auth (HS256 JWT via dependency-free helpers), users API, rate limiting, metrics,
+#   Companies House HTTP calls, and migrations.
+# - If you already have additional pins, keep them below; we aren’t removing anything.
+
+# --- Web stack ---
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.25,<1.0
+gunicorn>=21.0,<22.0
+
+# --- DB & migrations ---
+SQLAlchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+psycopg2-binary>=2.9,<3.0
+
+# --- Settings / validation ---
+python-dotenv>=1.0,<2.0
+pydantic>=2.0,<3.0
+pydantic-settings>=2.0,<3.0
+email-validator>=2.0,<3.0
+
+# --- Logging / utilities ---
+structlog>=23.0,<24.0
+tenacity>=8.2,<9.0
+
+# --- HTTP client (Companies House, web calls) ---
+httpx>=0.27,<1.0
+
+# --- Rate limiting (SlowAPI uses limits; Redis optional via storage URI) ---
+slowapi>=0.1.9,<0.2.0
+limits>=3.0,<4.0
+redis>=5.0,<6.0
+
+# --- Metrics ---
+prometheus-client>=0.20,<1.0
+
+# --- Auth & forms ---
+passlib[bcrypt]>=1.7,<2.0
+python-multipart>=0.0.9,<0.1.0

@@ -1,0 +1,8 @@
+-r base.txt
+-r dev.txt
+
+# Local development only
+watchdog>=2.1.0
+black>=23.0.0
+flake8>=6.0.0
+pre-commit>=3.0.0

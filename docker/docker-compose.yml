@@ -1,0 +1,186 @@
+# Optional shared defaults you can reuse with '<<: *defaults'
+x-env-files: &env_files
+  - ./.env
+  - ./.env.docker
+
+x-restart: &restart_policy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: detecktiv-postgres
+    <<: *restart_policy
+    env_file: *env_files
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "5432:5432" # expose locally for tools; remove if not needed
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - detecktiv
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: detecktiv-api
+    <<: *restart_policy
+    env_file: *env_files
+    environment:
+      INCLUDE_AGGREGATED_API_ROUTER: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+    working_dir: /app
+    volumes:
+      # Dev-friendly bind mount; comment out for production immutable image
+      - ./:/app
+    command: >
+      sh -c '
+        echo "[api] waiting for ${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}...";
+        until nc -z "${POSTGRES_HOST:-postgres}" "${POSTGRES_PORT:-5432}"; do
+          sleep "${WAIT_FOR_DB_SLEEP_SECS:-1}";
+        done;
+        echo "[api] db is up";
+
+        if [ "${RUN_MIGRATIONS_ON_BOOT:-1}" = "1" ]; then
+          echo "[api] running alembic upgrade ${MIGRATION_TARGET:-head}";
+          alembic upgrade "${MIGRATION_TARGET:-head}" || alembic upgrade head;
+        else
+          echo "[api] skipping migrations";
+        fi;
+
+        exec uvicorn app.main:app \
+          --host "${HOST:-0.0.0.0}" \
+          --port "${PORT:-8000}" \
+          $([ "${UVICORN_RELOAD:-0}" = "1" ] && echo "--reload")
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - detecktiv
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: detecktiv-pgadmin
+    <<: *restart_policy
+    env_file: *env_files
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-ChangeMe_PgAdmin_Dev_Only_!2345}
+      PGADMIN_LISTEN_PORT: "80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PGADMIN_LISTEN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - detecktiv
+
+  # Optional reverse proxy for friendly URLs & TLS (dev-friendly config in ops/caddy/Caddyfile)
+  caddy:
+    image: caddy:2
+    container_name: detecktiv-caddy
+    <<: *restart_policy
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+      # - "443:443"   # enable if you add TLS materials
+    volumes:
+      - ./ops/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - detecktiv
+
+  # ---------------------- Monitoring (optional) ----------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: detecktiv-prometheus
+    profiles: ["monitoring"]
+    <<: *restart_policy
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - detecktiv
+
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: detecktiv-grafana
+    profiles: ["monitoring"]
+    <<: *restart_policy
+    depends_on:
+      prometheus:
+        condition: service_started
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./ops/monitoring/provisioning/:/etc/grafana/provisioning:ro
+    networks:
+      - detecktiv
+
+  # --------------------------- Frontend (simplified) ---------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      target: prod
+    container_name: detecktiv-frontend-simple
+    <<: *restart_policy
+    env_file: *env_files
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-4173}:4173"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4173/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - detecktiv
+
+# --------------------------- Volumes & Networks ---------------------------
+volumes:
+  postgres-data:
+  pgadmin-data:
+  caddy-data:
+  caddy-config:
+  grafana-data:
+
+networks:
+  detecktiv:
+    name: detecktiv-net

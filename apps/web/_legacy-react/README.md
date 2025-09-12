@@ -1,1 +1,0 @@
-# apps/web/README.md — stub (React placeholder, no Next.js)

@@ -15,19 +15,19 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: apps/web/_legacy-react/package-lock.json
+        cache-dependency-path: apps/web/package-lock.json
         
     - name: Install dependencies
       run: |
-        cd apps/web/_legacy-react
+        cd apps/web
         npm ci
         
     - name: Lint
       run: |
-        cd apps/web/_legacy-react
+        cd apps/web
         npm run lint
         
     - name: Build
       run: |
-        cd apps/web/_legacy-react
+        cd apps/web
         npm run build

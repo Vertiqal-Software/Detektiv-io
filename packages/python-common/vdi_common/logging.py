@@ -1,1 +1,1 @@
-# logging.py — stub
+# Logging utilities

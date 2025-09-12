@@ -1,1 +1,1 @@
-# __init__.py — stub
+# VDI Common Python Package

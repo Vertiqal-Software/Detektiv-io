@@ -1,1 +1,0 @@
-# openapi-client-gen.md — stub

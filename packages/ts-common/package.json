@@ -1,1 +1,7 @@
-# package.json — stub
+{
+  "name": "@vdi/common",
+  "version": "0.1.0",
+  "description": "Common TypeScript utilities",
+  "main": "src/index.ts",
+  "dependencies": {}
+}

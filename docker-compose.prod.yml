@@ -1,1 +1,4 @@
-# docker-compose.prod.yml — stub
+# Production environment docker compose  
+# Placeholder for production-specific overrides
+version: '3.8'
+services: {}

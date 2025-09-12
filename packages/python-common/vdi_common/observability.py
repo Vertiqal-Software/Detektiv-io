@@ -1,1 +1,1 @@
-# observability.py — stub
+# Observability utilities

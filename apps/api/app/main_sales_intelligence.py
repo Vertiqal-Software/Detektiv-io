@@ -15,10 +15,9 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../../"))
 
-# CLAUDE_TODO: Fix imports - these modules need to be moved to apps/api/app/intelligence/
-# from src.intelligence.orchestrator import SalesIntelligenceOrchestrator
-# from src.intelligence.financial_analyzer import FinancialAnalyzer
-# from src.intelligence.sales_insights import SalesInsightEngine
+from app.intelligence.orchestrator import SalesIntelligenceOrchestrator
+from app.intelligence.financial_analyzer import FinancialAnalyzer
+from app.intelligence.sales_insights import SalesInsightEngine
 
 
 # Setup logging

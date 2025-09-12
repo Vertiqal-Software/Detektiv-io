@@ -68,7 +68,7 @@ services:
     depends_on:
       - api
     volumes:
-      - ./apps/web:/app
+      - ./apps/web/_legacy-react:/app
       - /app/node_modules
     restart: unless-stopped
 

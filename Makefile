@@ -51,7 +51,7 @@ help:
 .PHONY: install
 install:
 	python -m pip install --upgrade pip setuptools wheel
-	pip install -r requirements.txt
+	pip install -r apps/api/requirements.txt
 
 .PHONY: dev
 dev:

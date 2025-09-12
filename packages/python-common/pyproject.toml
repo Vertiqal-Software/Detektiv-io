@@ -1,1 +1,9 @@
-# pyproject.toml — stub
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vdi-common"
+version = "0.1.0"
+description = "Common utilities for VDI applications"
+dependencies = []
